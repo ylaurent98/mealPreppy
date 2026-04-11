@@ -3254,6 +3254,7 @@ function IngredientDbTab({
 }) {
   const [draftIngredient, setDraftIngredient] = useState<Omit<IngredientRecord, 'id' | 'source'> | null>(null)
   const [sourceFilter, setSourceFilter] = useState<'all' | 'default' | 'mine'>('all')
+  const [mfpImportJson, setMfpImportJson] = useState('')
   const displayNumberInput = (value: number) => (value === 0 ? '' : String(value))
   const sortedIngredientDb = sortIngredientRecords(ingredientDb)
   const filteredIngredientDb = sortedIngredientDb.filter((record) => {
@@ -3261,6 +3262,90 @@ function IngredientDbTab({
     if (sourceFilter === 'default') return record.source === 'default'
     return record.source === 'user'
   })
+
+  const applyMfpImportToDraft = () => {
+    if (!mfpImportJson.trim()) {
+      window.alert('Paste MyFitnessPal JSON first.')
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(mfpImportJson) as
+        | {
+            name?: unknown
+            brand?: unknown
+            serving?: unknown
+            nutritionPerServing?: {
+              calories?: unknown
+              protein?: unknown
+              carbs?: unknown
+              fat?: unknown
+            }
+          }
+        | Array<{
+            name?: unknown
+            brand?: unknown
+            serving?: unknown
+            nutritionPerServing?: {
+              calories?: unknown
+              protein?: unknown
+              carbs?: unknown
+              fat?: unknown
+            }
+          }>
+
+      const source = Array.isArray(parsed) ? parsed[0] : parsed
+      if (!source || typeof source !== 'object') {
+        window.alert('Invalid JSON format.')
+        return
+      }
+
+      const name = String(source.name ?? '').trim()
+      if (!name) {
+        window.alert('Imported JSON is missing the ingredient name.')
+        return
+      }
+
+      const brand = String(source.brand ?? '').trim()
+      const serving = String(source.serving ?? '').trim()
+      const calories = Number(source.nutritionPerServing?.calories ?? 0)
+      const protein = Number(source.nutritionPerServing?.protein ?? 0)
+      const carbs = Number(source.nutritionPerServing?.carbs ?? 0)
+      const fat = Number(source.nutritionPerServing?.fat ?? 0)
+
+      const servingLabel = serving || '1 serving'
+      const notes = [
+        'Imported from MyFitnessPal (local helper).',
+        brand ? `Brand: ${brand}` : null,
+        `Serving: ${servingLabel}`,
+        'Set grams-per-unit for exact recipe math.',
+      ]
+        .filter(Boolean)
+        .join(' ')
+
+      setDraftIngredient((current) => ({
+        name: brand ? `${name} (${brand})` : name,
+        category: current?.category ?? 'pantry',
+        nutritionPer100g: {
+          calories,
+          protein,
+          carbs,
+          fat,
+        },
+        unitGrams: {
+          g: 1,
+          unit: current?.unitGrams?.unit ?? 100,
+          cup: current?.unitGrams?.cup,
+          tbsp: current?.unitGrams?.tbsp,
+          tsp: current?.unitGrams?.tsp,
+          ml: current?.unitGrams?.ml,
+        },
+        notes,
+      }))
+    } catch {
+      window.alert('Could not parse JSON. Paste valid output from tools/mfp_food_search.py')
+    }
+  }
 
   return (
     <section className="surface tab-surface">
@@ -3305,6 +3390,23 @@ function IngredientDbTab({
         Conversion guide: `kcal per cup = (grams per cup * kcal per 100g) / 100`.
         Same for tbsp and tsp with their grams-per-unit values.
       </p>
+      <div className="ingredient-row">
+        <div className="panel-header">
+          <h4>MyFitnessPal Import (Local)</h4>
+          <button className="secondary-button" onClick={applyMfpImportToDraft}>
+            Use for draft ingredient
+          </button>
+        </div>
+        <p className="muted">
+          Run `python tools/mfp_food_search.py "ingredient name" --limit 5`, then paste one
+          JSON result (or the whole list) below.
+        </p>
+        <textarea
+          value={mfpImportJson}
+          placeholder={'[{"name":"Banana","brand":"USDA","serving":"1 medium","nutritionPerServing":{"calories":105,"protein":1.3,"carbs":27,"fat":0.4}}]'}
+          onChange={(event) => setMfpImportJson(event.target.value)}
+        />
+      </div>
 
       {draftIngredient ? (
         <div className="ingredient-row">
