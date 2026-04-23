@@ -1,5 +1,6 @@
-import {
+﻿import {
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -75,6 +76,7 @@ type DraggedItem =
   | null
 
 type ShoppingGroups = ReturnType<typeof generateShoppingList>
+type PlannerTheme = 'sunset' | 'garden'
 const DEFAULT_INGREDIENT_NAMES = new Set(
   seedTemplates
     .flatMap((template) => template.ingredients)
@@ -824,6 +826,11 @@ function loadState() {
   }
 }
 
+function loadPlannerTheme(): PlannerTheme {
+  const stored = localStorage.getItem('mealpreppy-theme-v1')
+  return stored === 'garden' ? 'garden' : 'sunset'
+}
+
 function App() {
   const [state, setState] = useState<AppState>(loadState)
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => state.weeks[0]?.weekStart ?? '')
@@ -852,10 +859,15 @@ function App() {
     quantity: 1,
     unit: 'g',
   })
+  const [plannerTheme, setPlannerTheme] = useState<PlannerTheme>(loadPlannerTheme)
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   }, [state])
+
+  useEffect(() => {
+    localStorage.setItem('mealpreppy-theme-v1', plannerTheme)
+  }, [plannerTheme])
 
   useEffect(() => {
     if (!isCloudConfigured) return
@@ -1684,6 +1696,80 @@ function App() {
 
   }
 
+  function unassignBox(boxId: string) {
+    if (!selectedWeek) return
+    updateState((current) => {
+      const linkedEntry = current.entries.find(
+        (entry) =>
+          entry.weekStart === selectedWeek.weekStart &&
+          entry.sourceType === 'box' &&
+          entry.sourceId === boxId,
+      )
+      if (!linkedEntry) return current
+
+      return {
+        ...current,
+        entries: current.entries.filter((entry) => entry.id !== linkedEntry.id),
+        weeks: current.weeks.map((week) =>
+          week.weekStart === selectedWeek.weekStart
+            ? { ...week, entryIds: week.entryIds.filter((id) => id !== linkedEntry.id) }
+            : week,
+        ),
+      }
+    })
+  }
+
+  function removeRecipeVersionFromWeek(versionId: string) {
+    if (!selectedWeek) return
+    const versionName =
+      state.versions.find((version) => version.id === versionId)?.name ?? 'this recipe'
+    const shouldDelete = window.confirm(
+      `Remove "${versionName}" from ${weekLabel(selectedWeek.weekStart)}? This also removes its made boxes and assigned planner entries.`,
+    )
+    if (!shouldDelete) return
+
+    const nextSelectedVersionId =
+      weekVersions.find((version) => version.id !== versionId)?.id ?? null
+
+    updateState((current) => {
+      const week = current.weeks.find((item) => item.weekStart === selectedWeek.weekStart)
+      if (!week) return current
+
+      const versionBoxIds = current.boxes
+        .filter(
+          (box) => box.recipeVersionId === versionId && week.boxIds.includes(box.id),
+        )
+        .map((box) => box.id)
+      const versionBoxSet = new Set(versionBoxIds)
+      const removedEntryIds = new Set(
+        current.entries
+          .filter(
+            (entry) => entry.sourceType === 'box' && versionBoxSet.has(entry.sourceId),
+          )
+          .map((entry) => entry.id),
+      )
+
+      return {
+        ...current,
+        versions: current.versions.filter((version) => version.id !== versionId),
+        boxes: current.boxes.filter((box) => !versionBoxSet.has(box.id)),
+        entries: current.entries.filter((entry) => !removedEntryIds.has(entry.id)),
+        weeks: current.weeks.map((item) =>
+          item.weekStart === selectedWeek.weekStart
+            ? {
+                ...item,
+                recipeVersionIds: item.recipeVersionIds.filter((id) => id !== versionId),
+                boxIds: item.boxIds.filter((id) => !versionBoxSet.has(id)),
+                entryIds: item.entryIds.filter((id) => !removedEntryIds.has(id)),
+              }
+            : item,
+        ),
+      }
+    })
+
+    setSelectedVersionId(nextSelectedVersionId)
+  }
+
   function deleteExtra(extraId: string) {
     if (!selectedWeek) return
 
@@ -1996,12 +2082,17 @@ function App() {
   }
 
   return (
-    <div className={isSidebarOpen ? 'shell sidebar-open' : 'shell'}>
+    <div
+      className={
+        isSidebarOpen
+          ? `shell theme-${plannerTheme} sidebar-open`
+          : `shell theme-${plannerTheme}`
+      }
+    >
       <aside className={isSidebarOpen ? 'sidebar open' : 'sidebar'}>
         <div className="brand">
           <div className="brand-mark">MP</div>
           <div>
-            <p className="eyebrow">Funky meal prep OS</p>
             <h1>Mealpreppy</h1>
           </div>
         </div>
@@ -2024,21 +2115,6 @@ function App() {
             </button>
           ))}
         </nav>
-
-        <section className="sidebar-panel compact-week-panel">
-          <div className="panel-header">
-            <h2>Week</h2>
-            <input
-              type="date"
-              value={selectedWeekStart}
-              onChange={(event) => goToWeek(event.target.value)}
-            />
-          </div>
-          <div className="week-switcher">
-            <button onClick={() => goToWeek(addWeeks(selectedWeekStart, -1))}>Prev</button>
-            <button onClick={() => goToWeek(addWeeks(selectedWeekStart, 1))}>Next</button>
-          </div>
-        </section>
 
         <section className="sidebar-panel compact-week-panel">
           <div className="panel-header">
@@ -2207,10 +2283,39 @@ function App() {
         </div>
         <header className="hero">
           <div>
-            <h1>Mealpreppy</h1>
-            <p className="hero-copy">
-              Mealpreppy helps you prep once and plan with confidence by keeping every week historically accurate through versioned recipes, draggable meal boxes, and shopping lists built from what you actually make.
-            </p>
+            <p className="hero-week-chip">{selectedWeek ? weekLabel(selectedWeek.weekStart) : 'This week'}</p>
+            <h1 className="hero-title">
+              Mealpreppy <span aria-hidden="true">✦</span>
+            </h1>
+          </div>
+          <div className="theme-picker" role="group" aria-label="Theme selector">
+            <span className="theme-picker-label">Theme</span>
+            <button
+              type="button"
+              className={plannerTheme === 'sunset' ? 'theme-chip active' : 'theme-chip'}
+              onClick={() => setPlannerTheme('sunset')}
+            >
+              <span className="theme-chip-swatches">
+                <i style={{ background: '#f08a4b' }} />
+                <i style={{ background: '#e8b4a0' }} />
+                <i style={{ background: '#d9607a' }} />
+                <i style={{ background: '#f2c14e' }} />
+              </span>
+              Sunset
+            </button>
+            <button
+              type="button"
+              className={plannerTheme === 'garden' ? 'theme-chip active' : 'theme-chip'}
+              onClick={() => setPlannerTheme('garden')}
+            >
+              <span className="theme-chip-swatches">
+                <i style={{ background: '#88c9a1' }} />
+                <i style={{ background: '#bee3aa' }} />
+                <i style={{ background: '#d4d58a' }} />
+                <i style={{ background: '#f4dc7e' }} />
+              </span>
+              Garden
+            </button>
           </div>
         </header>
 
@@ -2245,6 +2350,7 @@ function App() {
             unassignedExtras={unassignedExtras}
             onAssignBox={assignBox}
             onAssignExtra={assignExtra}
+            onUnassignBox={unassignBox}
             draggedItem={draggedItem}
             onSetDraggedItem={setDraggedItem}
             onClearDraggedItem={() => setDraggedItem(null)}
@@ -2260,6 +2366,8 @@ function App() {
             onExportWeekPdf={exportWeekPdf}
             onDeleteExtra={deleteExtra}
             onDeleteBatchForVersion={deleteBatchForVersion}
+            onRemoveVersionFromWeek={removeRecipeVersionFromWeek}
+            onGoToWeek={goToWeek}
           />
         ) : null}
 
@@ -2410,6 +2518,7 @@ function WeeklyTab(props: {
   unassignedExtras: AppState['extras']
   onAssignBox: (boxId: string, dayIndex: number, mealType: MealType) => void
   onAssignExtra: (extraId: string, dayIndex: number, mealType: MealType) => void
+  onUnassignBox: (boxId: string) => void
   draggedItem: DraggedItem
   onSetDraggedItem: (item: DraggedItem) => void
   onClearDraggedItem: () => void
@@ -2425,6 +2534,8 @@ function WeeklyTab(props: {
   onExportWeekPdf: () => void
   onDeleteExtra: (extraId: string) => void
   onDeleteBatchForVersion: (versionId: string) => void
+  onRemoveVersionFromWeek: (versionId: string) => void
+  onGoToWeek: (weekStart: string) => void
 }) {
   const {
     state,
@@ -2452,6 +2563,7 @@ function WeeklyTab(props: {
     unassignedExtras,
     onAssignBox,
     onAssignExtra,
+    onUnassignBox,
     draggedItem,
     onSetDraggedItem,
     onClearDraggedItem,
@@ -2467,6 +2579,8 @@ function WeeklyTab(props: {
     onExportWeekPdf,
     onDeleteExtra,
     onDeleteBatchForVersion,
+    onRemoveVersionFromWeek,
+    onGoToWeek,
   } = props
 
   const selectedVersionBoxes = selectedVersion
@@ -2489,14 +2603,26 @@ function WeeklyTab(props: {
         selectedVersion,
       ]
     : weekVersions
+  const versionModelMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    const orderedIds = selectedWeek.recipeVersionIds.filter((recipeVersionId) =>
+      weekVersions.some((version) => version.id === recipeVersionId),
+    )
+    orderedIds.forEach((recipeVersionId, index) => {
+      map[recipeVersionId] = (index % 6) + 1
+    })
+    return map
+  }, [selectedWeek.recipeVersionIds, weekVersions])
   const [isSelectedVersionExpanded, setIsSelectedVersionExpanded] = useState(false)
   const [multiplyInput, setMultiplyInput] = useState('')
   const [divideInput, setDivideInput] = useState('')
   const [draggedVersionIngredientId, setDraggedVersionIngredientId] = useState<string | null>(null)
   const unassignedBoxesRef = useRef<HTMLElement | null>(null)
+  const weekDateInputRef = useRef<HTMLInputElement | null>(null)
   const [servingsInput, setServingsInput] = useState(
     selectedVersion ? String(selectedVersion.servings) : '',
   )
+  const weekRangeLabel = `${shortDateLabel(selectedWeek.weekStart)} → ${shortDateLabel(addDays(selectedWeek.weekStart, 6))}`
 
   useEffect(() => {
     setDraggedVersionIngredientId(null)
@@ -2578,7 +2704,7 @@ function WeeklyTab(props: {
     <section className="page-grid weekly-grid">
       <div className="surface versions-panel">
         <div className="panel-header">
-          <h3>Recipe Versions</h3>
+          <h3>Recipe</h3>
           <div className="action-row">
             <button className="secondary-button" onClick={onOpenRecipesTab}>
               Add recipe
@@ -2588,20 +2714,97 @@ function WeeklyTab(props: {
         </div>
 
         <div className="version-list">
-          {orderedWeekVersions.map((version) => (
-            <button
-              key={version.id}
-              className={selectedVersion?.id === version.id ? 'version-card active' : 'version-card'}
-              onClick={() => handleToggleVersion(version.id)}
-            >
-              <div>
-                <h4>
-                  {version.name}{' '}
-                  <span className="inline-arrow">▾</span>
-                </h4>
+          {orderedWeekVersions.map((version) => {
+            const versionBoxes = state.boxes.filter(
+              (box) =>
+                box.recipeVersionId === version.id &&
+                box.weekStart === selectedWeek.weekStart,
+            )
+            const assignedBoxIds = new Set(
+              weekEntries
+                .filter((entry) => entry.sourceType === 'box')
+                .map((entry) => entry.sourceId),
+            )
+            const usedCount = versionBoxes.filter((box) =>
+              assignedBoxIds.has(box.id),
+            ).length
+            const model = versionModelMap[version.id] ?? 1
+
+            return (
+              <div
+                key={version.id}
+                className={selectedVersion?.id === version.id ? 'version-card active' : 'version-card'}
+                onClick={() => handleToggleVersion(version.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    handleToggleVersion(version.id)
+                  }
+                }}
+              >
+                <div className="version-card-row">
+                  <h4>
+                    {version.name}{' '}
+                    <span className="inline-arrow">?</span>
+                  </h4>
+                  <button
+                    type="button"
+                    className="version-remove-button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onRemoveVersionFromWeek(version.id)
+                    }}
+                    aria-label={`Remove ${version.name}`}
+                    title="Remove recipe from this week"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="version-card-meta">
+                  <span>{Math.round(version.nutritionPerServing.calories)}kc</span>
+                  <span>{Math.round(version.nutritionPerServing.protein)}p</span>
+                  <span>{Math.round(version.nutritionPerServing.carbs)}c</span>
+                  <span>{Math.round(version.nutritionPerServing.fat)}f</span>
+                  <strong>
+                    {usedCount}/{versionBoxes.length} used
+                  </strong>
+                </div>
+                <div className="version-card-boxes">
+                  {versionBoxes.length > 0 ? (
+                    versionBoxes.map((box) => {
+                      const isUsed = assignedBoxIds.has(box.id)
+                      return (
+                        <button
+                          key={box.id}
+                          type="button"
+                          className={
+                            isUsed
+                              ? `recipe-box-mini box-model-${model} is-used`
+                              : `recipe-box-mini box-model-${model}`
+                          }
+                          draggable
+                          onDragStart={(event) => {
+                            event.stopPropagation()
+                            onSetDraggedItem({ kind: 'box', id: box.id })
+                          }}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                          }}
+                          aria-label={`${version.name} box ${box.boxNumber}`}
+                        >
+                          <span className="mini-lid" aria-hidden="true" />
+                        </button>
+                      )
+                    })
+                  ) : (
+                    <span className="muted">No made boxes yet</span>
+                  )}
+                </div>
               </div>
-            </button>
-          ))}
+            )
+          })}
         </div>
 
         {selectedVersion ? (
@@ -2951,16 +3154,60 @@ function WeeklyTab(props: {
 
       <div className="surface planner-panel">
         <div className="panel-header planner-header">
-          <div>
+          <div className="planner-title-stack">
             <h3>Weekly Planner</h3>
-            <p className="muted">Drop recipe boxes or extra snacks onto any meal slot.</p>
+            <div className="week-strip-controls">
+              <button
+                type="button"
+                className="week-nav-mini"
+                onClick={() => onGoToWeek(addWeeks(selectedWeek.weekStart, -1))}
+                aria-label="Previous week"
+              >
+                ←
+              </button>
+              <div className="week-strip-badge">
+                <span>{weekRangeLabel}</span>
+                <button
+                  type="button"
+                  className="week-calendar-trigger"
+                  aria-label="Pick week start date"
+                  onClick={() => {
+                    if (weekDateInputRef.current?.showPicker) {
+                      weekDateInputRef.current.showPicker()
+                      return
+                    }
+                    weekDateInputRef.current?.click()
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="4" y="5" width="16" height="15" rx="3" />
+                    <path d="M4 10.5h16M8 3.5v3M16 3.5v3" />
+                    <circle cx="9" cy="14" r="1.2" />
+                    <circle cx="13" cy="14" r="1.2" />
+                    <circle cx="17" cy="14" r="1.2" />
+                  </svg>
+                </button>
+                <input
+                  ref={weekDateInputRef}
+                  className="week-date-hidden"
+                  type="date"
+                  value={selectedWeek.weekStart}
+                  onChange={(event) => onGoToWeek(event.target.value)}
+                  aria-label="Week start"
+                />
+              </div>
+              <button
+                type="button"
+                className="week-nav-mini"
+                onClick={() => onGoToWeek(addWeeks(selectedWeek.weekStart, 1))}
+                aria-label="Next week"
+              >
+                →
+              </button>
+            </div>
           </div>
           <div className="planner-header-controls">
-            <MacroSplitSlider
-              split={selectedWeek.macroTargetPercentages}
-              onChange={onUpdateMacroTargetSplit}
-            />
-            <div className="target-toolbar compact">
+            <div className="target-toolbar compact target-toolbar-side">
               <label>
                 Default daily target
                 <input
@@ -2982,16 +3229,34 @@ function WeeklyTab(props: {
                 Fill all 7 days
               </button>
             </div>
+            <MacroSplitSlider
+              split={selectedWeek.macroTargetPercentages}
+              onChange={onUpdateMacroTargetSplit}
+            />
           </div>
         </div>
 
         {unassignedBoxes.length > 0 || unassignedExtras.length > 0 ? (
           <div className="planner-pools">
             {unassignedBoxes.length > 0 ? (
-              <section ref={unassignedBoxesRef} className="planner-pool">
+              <section
+                ref={unassignedBoxesRef}
+                className="planner-pool"
+                onDragOver={(event) => {
+                  if (draggedItem?.kind === 'box') {
+                    event.preventDefault()
+                  }
+                }}
+                onDrop={() => {
+                  if (draggedItem?.kind !== 'box') return
+                  onUnassignBox(draggedItem.id)
+                  onClearDraggedItem()
+                }}
+              >
                 <div className="panel-header">
                   <div>
                     <h4>Assign meal to week</h4>
+                    <p className="muted">Drag assigned boxes back here to unassign.</p>
                   </div>
                   <span className="badge">{unassignedBoxes.length}</span>
                 </div>
@@ -3000,6 +3265,7 @@ function WeeklyTab(props: {
                     <BoxCard
                       key={box.id}
                       box={box}
+                      modelNumber={versionModelMap[box.recipeVersionId]}
                       onFractionChange={(value) => onUpdateBoxFraction(box.id, value)}
                       onDragStart={() => onSetDraggedItem({ kind: 'box', id: box.id })}
                     />
@@ -3034,12 +3300,16 @@ function WeeklyTab(props: {
         <div className="planner-scroll">
           <div className="planner-grid">
             <div className="planner-corner">Meal</div>
-            {dayNames.map((day, index) => (
-              <div key={day} className="planner-day">
-                <span>{day}</span>
-                <strong>{shortDateLabel(addDays(selectedWeek.weekStart, index))}</strong>
+            {dayNames.map((day, index) => {
+              const dayNumber = new Intl.DateTimeFormat(undefined, {
+                day: 'numeric',
+              }).format(new Date(`${addDays(selectedWeek.weekStart, index)}T00:00:00`))
+              return (
+                <div key={day} className="planner-day">
+                  <span>{day}</span>
+                  <strong>{dayNumber}</strong>
                 <label className="day-target-input">
-                  <span>Target</span>
+                  <span>tgt</span>
                   <input
                     type="number"
                     min={0}
@@ -3057,8 +3327,9 @@ function WeeklyTab(props: {
                     }
                   />
                 </label>
-              </div>
-            ))}
+                </div>
+              )
+            })}
 
             {mealTypes.map((mealType) => (
               <MealRow
@@ -3073,6 +3344,7 @@ function WeeklyTab(props: {
                 onClearDraggedItem={onClearDraggedItem}
                 onRemoveEntry={onRemoveEntry}
                 onUpdateBoxFraction={onUpdateBoxFraction}
+                versionModelMap={versionModelMap}
               />
             ))}
 
@@ -3183,6 +3455,7 @@ function MealRow({
   onClearDraggedItem,
   onRemoveEntry,
   onUpdateBoxFraction,
+  versionModelMap,
 }: {
   mealType: MealType
   weekEntries: AppState['entries']
@@ -3194,6 +3467,7 @@ function MealRow({
   onClearDraggedItem: () => void
   onRemoveEntry: (entryId: string) => void
   onUpdateBoxFraction: (boxId: string, fraction: number) => void
+  versionModelMap: Record<string, number>
 }) {
   return (
     <>
@@ -3223,6 +3497,7 @@ function MealRow({
                 key={entry.id}
                 entry={entry}
                 state={state}
+                versionModelMap={versionModelMap}
                 onDragStart={() =>
                   onSetDraggedItem({
                     kind: entry.sourceType,
@@ -4033,3 +4308,4 @@ function StatsTab({ stats }: { stats: ReturnType<typeof buildStats> }) {
 }
 
 export default App
+
