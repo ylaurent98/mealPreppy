@@ -627,16 +627,25 @@ export function cloneTemplateIntoWeek(
 
 export function scaleVersionServings(version: RecipeVersion, newServings: number) {
   if (newServings <= 0) return version
-  const ratio = newServings / version.servings
   return syncVersionNutrition({
     ...version,
     servings: newServings,
+    updatedAt: new Date().toISOString(),
+  })
+}
+
+export function scaleVersionIngredients(version: RecipeVersion, factor: number) {
+  if (factor <= 0) return version
+  const nextCookPortionsBase = version.cookPortions > 0 ? version.cookPortions : version.servings
+  return syncVersionNutrition({
+    ...version,
+    cookPortions: Number((nextCookPortionsBase * factor).toFixed(2)),
     ingredients: version.ingredients.map((ingredient) => ({
       ...ingredient,
       quantity:
         ingredient.quantity === null
           ? null
-          : Number((ingredient.quantity * ratio).toFixed(2)),
+          : Number((ingredient.quantity * factor).toFixed(2)),
     })),
     updatedAt: new Date().toISOString(),
   })

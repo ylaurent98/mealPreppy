@@ -9,6 +9,7 @@ import {
   cloneTemplateIntoWeek,
   createInitialState,
   remakeBoxesForVersion,
+  scaleVersionIngredients,
   scaleVersionServings,
   seedTemplates,
 } from './seedData'
@@ -710,6 +711,10 @@ function formatCalories(value: number | null | undefined) {
   return new Intl.NumberFormat(undefined).format(Math.round(value))
 }
 
+function formatMacroInteger(value: number) {
+  return Math.round(value)
+}
+
 function getAvailableUnits(line: IngredientLine) {
   const units = Object.keys(line.unitGrams ?? {})
   if (!units.includes('g')) units.unshift('g')
@@ -722,24 +727,56 @@ function sortIngredientRecords(records: IngredientRecord[]) {
     .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }))
 }
 
-function sortIngredientLinesForRecipe(lines: IngredientLine[]) {
-  const categoryOrder: Record<GroceryCategory, number> = {
-    pantry: 0,
-    fruitVeg: 1,
-    meatDairy: 2,
-  }
+function normalizeIngredientGroup(group: string | undefined) {
+  const normalized = (group ?? '').trim()
+  if (!normalized) return 'main'
+  return normalized.toLowerCase() === 'main' ? 'main' : normalized
+}
 
-  return lines.slice().sort((left, right) => {
-    const categoryDelta = categoryOrder[left.category] - categoryOrder[right.category]
-    if (categoryDelta !== 0) return categoryDelta
-    const nameDelta = left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })
-    if (nameDelta !== 0) return nameDelta
-    const groupDelta = (left.group ?? '').localeCompare(right.group ?? '', undefined, { sensitivity: 'base' })
-    if (groupDelta !== 0) return groupDelta
-    const rawTextDelta = (left.rawText ?? '').localeCompare(right.rawText ?? '', undefined, { sensitivity: 'base' })
-    if (rawTextDelta !== 0) return rawTextDelta
-    return left.id.localeCompare(right.id, undefined, { sensitivity: 'base' })
-  })
+function getIngredientGroupLabel(line: IngredientLine | undefined) {
+  if (!line) return 'main'
+  const group = normalizeIngredientGroup(line.group)
+  const name = line.name.trim()
+  if (group !== 'main' && name && group.toLowerCase() === name.toLowerCase()) {
+    return 'main'
+  }
+  return group
+}
+
+function formatTwoDecimals(value: number) {
+  return value.toFixed(2)
+}
+
+function reorderIngredientLines(
+  lines: IngredientLine[],
+  draggedLineId: string,
+  targetLineId: string,
+) {
+  if (draggedLineId === targetLineId) return lines
+  const fromIndex = lines.findIndex((line) => line.id === draggedLineId)
+  const toIndex = lines.findIndex((line) => line.id === targetLineId)
+  if (fromIndex < 0 || toIndex < 0) return lines
+  const next = lines.slice()
+  const [moved] = next.splice(fromIndex, 1)
+  next.splice(toIndex, 0, moved)
+  return next
+}
+
+function moveIngredientLineToGroup(
+  lines: IngredientLine[],
+  draggedLineId: string,
+  targetLineId: string,
+) {
+  const target = lines.find((line) => line.id === targetLineId)
+  const nextGroup = normalizeIngredientGroup(target?.group)
+  return reorderIngredientLines(lines, draggedLineId, targetLineId).map((line) =>
+    line.id === draggedLineId
+      ? {
+          ...line,
+          group: nextGroup,
+        }
+      : line,
+  )
 }
 
 function normalizeParsedState(parsed: AppState) {
@@ -1123,14 +1160,15 @@ function App() {
     }))
   }
 
-  function addIngredientToTemplate(templateId: string) {
+  function addIngredientToTemplate(templateId: string, group?: string) {
+    const normalizedGroup = normalizeIngredientGroup(group)
     updateTemplate(templateId, (template) => ({
       ...template,
       ingredients: [
         ...template.ingredients,
         {
           id: createId('ingredient'),
-          group: 'main',
+          group: normalizedGroup,
           name: '',
           rawText: '',
           quantity: null,
@@ -1150,6 +1188,18 @@ function App() {
     updateTemplate(templateId, (template) => ({
       ...template,
       ingredients: template.ingredients.filter((ingredient) => ingredient.id !== lineId),
+    }))
+  }
+
+  function clearIngredientGroupInTemplate(templateId: string, group: string) {
+    const normalizedGroup = normalizeIngredientGroup(group)
+    updateTemplate(templateId, (template) => ({
+      ...template,
+      ingredients: template.ingredients.map((ingredient) =>
+        normalizeIngredientGroup(ingredient.group) === normalizedGroup
+          ? { ...ingredient, group: 'main' }
+          : ingredient,
+      ),
     }))
   }
 
@@ -1396,7 +1446,8 @@ function App() {
     }))
   }
 
-  function addIngredientToVersion(versionId: string) {
+  function addIngredientToVersion(versionId: string, group?: string) {
+    const normalizedGroup = normalizeIngredientGroup(group)
     updateVersion(versionId, (version) =>
       syncVersionNutrition({
         ...version,
@@ -1404,7 +1455,7 @@ function App() {
           ...version.ingredients,
           {
             id: createId('ingredient'),
-            group: 'main',
+            group: normalizedGroup,
             name: '',
             rawText: '',
             quantity: null,
@@ -1427,6 +1478,35 @@ function App() {
       syncVersionNutrition({
         ...version,
         ingredients: version.ingredients.filter((ingredient) => ingredient.id !== lineId),
+        updatedAt: new Date().toISOString(),
+      }),
+    )
+  }
+
+  function moveIngredientInVersion(versionId: string, draggedLineId: string, targetLineId: string) {
+    updateVersion(versionId, (version) =>
+      syncVersionNutrition({
+        ...version,
+        ingredients: moveIngredientLineToGroup(
+          version.ingredients,
+          draggedLineId,
+          targetLineId,
+        ),
+        updatedAt: new Date().toISOString(),
+      }),
+    )
+  }
+
+  function clearIngredientGroupInVersion(versionId: string, group: string) {
+    const normalizedGroup = normalizeIngredientGroup(group)
+    updateVersion(versionId, (version) =>
+      syncVersionNutrition({
+        ...version,
+        ingredients: version.ingredients.map((ingredient) =>
+          normalizeIngredientGroup(ingredient.group) === normalizedGroup
+            ? { ...ingredient, group: 'main' }
+            : ingredient,
+        ),
         updatedAt: new Date().toISOString(),
       }),
     )
@@ -2127,18 +2207,10 @@ function App() {
         </div>
         <header className="hero">
           <div>
-            <p className="eyebrow">Meal planning, versioned</p>
-            <h2>Prep once, keep every week historically accurate</h2>
+            <h1>Mealpreppy</h1>
             <p className="hero-copy">
-              Default recipes stay reusable. Weekly versions stay dated. Boxes stay draggable.
-              Shopping lists stay grouped for the store.
+              Mealpreppy helps you prep once and plan with confidence by keeping every week historically accurate through versioned recipes, draggable meal boxes, and shopping lists built from what you actually make.
             </p>
-          </div>
-          <div className="hero-badges">
-            <span>Versioned Recipes</span>
-            <span>Box Planner</span>
-            <span>Shopping List</span>
-            <span>History Calendar</span>
           </div>
         </header>
 
@@ -2156,12 +2228,18 @@ function App() {
             onUpdateIngredient={updateIngredient}
             onAddIngredientToVersion={addIngredientToVersion}
             onRemoveIngredientFromVersion={removeIngredientFromVersion}
+            onMoveIngredientInVersion={moveIngredientInVersion}
+            onClearIngredientGroupInVersion={clearIngredientGroupInVersion}
             onOpenIngredientDb={() => setActiveTab('ingredients')}
+            onOpenRecipesTab={() => setActiveTab('recipes')}
             onHandleMake={handleMake}
             onReloadVersionFromTemplate={reloadVersionFromTemplate}
             onSaveVersionAsNewDefault={saveVersionAsNewDefault}
             onVersionServings={(version, servings) =>
               updateVersion(version.id, (current) => scaleVersionServings(current, servings))
+            }
+            onScaleVersionIngredients={(version, factor) =>
+              updateVersion(version.id, (current) => scaleVersionIngredients(current, factor))
             }
             unassignedBoxes={unassignedBoxes}
             unassignedExtras={unassignedExtras}
@@ -2196,6 +2274,7 @@ function App() {
             onUpdateTemplateIngredient={updateTemplateIngredient}
             onAddIngredientToTemplate={addIngredientToTemplate}
             onRemoveIngredientFromTemplate={removeIngredientFromTemplate}
+            onClearIngredientGroupInTemplate={clearIngredientGroupInTemplate}
             onOpenIngredientDb={() => setActiveTab('ingredients')}
             onSaveTemplateAsNewDefault={saveTemplateAsNewDefault}
             onAddVersion={addVersion}
@@ -2312,13 +2391,21 @@ function WeeklyTab(props: {
   onSelectVersion: (id: string) => void
   onUpdateVersion: (id: string, updater: (version: RecipeVersion) => RecipeVersion) => void
   onUpdateIngredient: (versionId: string, lineId: string, patch: Partial<IngredientLine>) => void
-  onAddIngredientToVersion: (versionId: string) => void
+  onAddIngredientToVersion: (versionId: string, group?: string) => void
   onRemoveIngredientFromVersion: (versionId: string, lineId: string) => void
+  onMoveIngredientInVersion: (
+    versionId: string,
+    draggedLineId: string,
+    targetLineId: string,
+  ) => void
+  onClearIngredientGroupInVersion: (versionId: string, group: string) => void
   onOpenIngredientDb: () => void
+  onOpenRecipesTab: () => void
   onHandleMake: (version: RecipeVersion) => void
   onReloadVersionFromTemplate: (versionId: string) => void
   onSaveVersionAsNewDefault: (version: RecipeVersion) => void
   onVersionServings: (version: RecipeVersion, servings: number) => void
+  onScaleVersionIngredients: (version: RecipeVersion, factor: number) => void
   unassignedBoxes: AppState['boxes']
   unassignedExtras: AppState['extras']
   onAssignBox: (boxId: string, dayIndex: number, mealType: MealType) => void
@@ -2352,11 +2439,15 @@ function WeeklyTab(props: {
     onUpdateIngredient,
     onAddIngredientToVersion,
     onRemoveIngredientFromVersion,
+    onMoveIngredientInVersion,
+    onClearIngredientGroupInVersion,
     onOpenIngredientDb,
+    onOpenRecipesTab,
     onHandleMake,
     onReloadVersionFromTemplate,
     onSaveVersionAsNewDefault,
     onVersionServings,
+    onScaleVersionIngredients,
     unassignedBoxes,
     unassignedExtras,
     onAssignBox,
@@ -2390,41 +2481,136 @@ function WeeklyTab(props: {
     : []
   const sortedIngredientDb = sortIngredientRecords(ingredientDb)
   const sortedVersionIngredients = selectedVersion
-    ? sortIngredientLinesForRecipe(selectedVersion.ingredients)
+    ? selectedVersion.ingredients
     : []
+  const orderedWeekVersions = selectedVersion
+    ? [
+        ...weekVersions.filter((version) => version.id !== selectedVersion.id),
+        selectedVersion,
+      ]
+    : weekVersions
+  const [isSelectedVersionExpanded, setIsSelectedVersionExpanded] = useState(false)
+  const [multiplyInput, setMultiplyInput] = useState('')
+  const [divideInput, setDivideInput] = useState('')
+  const [draggedVersionIngredientId, setDraggedVersionIngredientId] = useState<string | null>(null)
+  const unassignedBoxesRef = useRef<HTMLElement | null>(null)
+  const [servingsInput, setServingsInput] = useState(
+    selectedVersion ? String(selectedVersion.servings) : '',
+  )
+
+  useEffect(() => {
+    setDraggedVersionIngredientId(null)
+    setServingsInput(selectedVersion ? String(selectedVersion.servings) : '')
+  }, [selectedVersion?.id])
+
+  useEffect(() => {
+    if (!selectedVersion) return
+    setServingsInput(String(selectedVersion.servings))
+  }, [selectedVersion?.servings])
+
+  function handleToggleVersion(versionId: string) {
+    if (selectedVersion?.id === versionId) {
+      setIsSelectedVersionExpanded((current) => !current)
+      return
+    }
+    onSelectVersion(versionId)
+    setIsSelectedVersionExpanded(true)
+    setMultiplyInput('')
+    setDivideInput('')
+    setDraggedVersionIngredientId(null)
+  }
+
+  function commitServingsInput() {
+    if (!selectedVersion) return
+    const parsed = Number(servingsInput)
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setServingsInput(String(selectedVersion.servings))
+      return
+    }
+    onVersionServings(selectedVersion, parsed)
+    setServingsInput(String(parsed))
+  }
+
+  function parseScaleInput(value: string) {
+    const factor = Number(value)
+    if (!Number.isFinite(factor) || factor <= 0) {
+      window.alert('Enter a valid number greater than 0.')
+      return null
+    }
+    return factor
+  }
+
+  function handleMultiplyIngredients() {
+    if (!selectedVersion) return
+    const factor = parseScaleInput(multiplyInput)
+    if (!factor) return
+    onScaleVersionIngredients(selectedVersion, factor)
+    setMultiplyInput('')
+  }
+
+  function handleDivideIngredients() {
+    if (!selectedVersion) return
+    const factor = parseScaleInput(divideInput)
+    if (!factor) return
+    onScaleVersionIngredients(selectedVersion, 1 / factor)
+    setDivideInput('')
+  }
+
+  function handleAddSubtitleForVersion() {
+    if (!selectedVersion) return
+    const subtitle = window.prompt('Subtitle name:')?.trim()
+    if (!subtitle) {
+      return
+    }
+    onAddIngredientToVersion(selectedVersion.id, subtitle)
+  }
+
+  function handleMakeAndCollapse() {
+    if (!selectedVersion) return
+    onHandleMake(selectedVersion)
+    setIsSelectedVersionExpanded(false)
+    setTimeout(() => {
+      unassignedBoxesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 0)
+  }
 
   return (
     <section className="page-grid weekly-grid">
       <div className="surface versions-panel">
         <div className="panel-header">
           <h3>Recipe Versions</h3>
-          <span className="badge">{weekVersions.length}</span>
+          <div className="action-row">
+            <button className="secondary-button" onClick={onOpenRecipesTab}>
+              Add recipe
+            </button>
+            <span className="badge">{weekVersions.length}</span>
+          </div>
         </div>
 
         <div className="version-list">
-          {weekVersions.map((version) => (
+          {orderedWeekVersions.map((version) => (
             <button
               key={version.id}
               className={selectedVersion?.id === version.id ? 'version-card active' : 'version-card'}
-              onClick={() => onSelectVersion(version.id)}
+              onClick={() => handleToggleVersion(version.id)}
             >
               <div>
-                <h4>{version.name}</h4>
-              </div>
-              <div className="mini-metrics">
-                <span>{version.servings} servings</span>
-                <span>{version.lastMadeAt ? 'Made' : 'Draft'}</span>
+                <h4>
+                  {version.name}{' '}
+                  <span className="inline-arrow">▾</span>
+                </h4>
               </div>
             </button>
           ))}
         </div>
 
         {selectedVersion ? (
-          <div className="editor">
+          <>
+            {isSelectedVersionExpanded ? (
+              <div className="editor version-editor-expanded">
             <div className="panel-header">
-              <h3>{selectedVersion.name}</h3>
               <div className="action-row">
-                <button onClick={() => onHandleMake(selectedVersion)}>Make</button>
+                <button onClick={handleMakeAndCollapse}>Make</button>
                 <button
                   className="secondary-button"
                   onClick={() => onReloadVersionFromTemplate(selectedVersion.id)}
@@ -2461,73 +2647,78 @@ function WeeklyTab(props: {
               </p>
             ) : null}
 
-            <label>
-              Name
-              <input
-                value={selectedVersion.name}
-                onChange={(event) =>
-                  onUpdateVersion(selectedVersion.id, (version) => ({
-                    ...version,
-                    name: event.target.value,
-                    updatedAt: new Date().toISOString(),
-                  }))
-                }
-              />
-            </label>
-
-            <label>
-              Servings
-              <input
-                type="number"
-                min={1}
-                value={selectedVersion.servings}
-                onChange={(event) =>
-                  onVersionServings(selectedVersion, Number(event.target.value))
-                }
-              />
-            </label>
-
-            <div className="nutrition-editor readonly">
-              <div className="metric-tile">
-                <span>Calories / serving</span>
-                <strong>{selectedVersion.nutritionPerServing.calories}</strong>
-              </div>
-              <div className="metric-tile">
-                <span>Protein</span>
-                <strong>{selectedVersion.nutritionPerServing.protein}g</strong>
-              </div>
-              <div className="metric-tile">
-                <span>Carbs</span>
-                <strong>{selectedVersion.nutritionPerServing.carbs}g</strong>
-              </div>
-              <div className="metric-tile">
-                <span>Fat</span>
-                <strong>{selectedVersion.nutritionPerServing.fat}g</strong>
-              </div>
+            <div className="version-quick-actions">
+              <label>
+                Servings
+                <input
+                  type="number"
+                  min={1}
+                  value={servingsInput}
+                  onChange={(event) => setServingsInput(event.target.value)}
+                  onBlur={commitServingsInput}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') commitServingsInput()
+                  }}
+                />
+              </label>
+              <label className="week-notes-inline">
+                Week notes
+                <input
+                  value={selectedVersion.notes}
+                  placeholder="Add week notes"
+                  onChange={(event) =>
+                    onUpdateVersion(selectedVersion.id, (version) => ({
+                      ...version,
+                      notes: event.target.value,
+                      updatedAt: new Date().toISOString(),
+                    }))
+                  }
+                />
+              </label>
             </div>
-
-            <label>
-              Week notes
-              <textarea
-                value={selectedVersion.notes}
-                onChange={(event) =>
-                  onUpdateVersion(selectedVersion.id, (version) => ({
-                    ...version,
-                    notes: event.target.value,
-                    updatedAt: new Date().toISOString(),
-                  }))
-                }
-              />
-            </label>
-
-            <div className="version-total">
-              <span>Total recipe nutrition</span>
-              <strong>
-                {selectedVersion.nutritionPerServing.calories * selectedVersion.servings} kcal /{' '}
-                {selectedVersion.nutritionPerServing.protein * selectedVersion.servings}P /{' '}
-                {selectedVersion.nutritionPerServing.carbs * selectedVersion.servings}C /{' '}
-                {selectedVersion.nutritionPerServing.fat * selectedVersion.servings}F
-              </strong>
+            <div className="nutrition-dual">
+              <div className="nutrition-group">
+                <small className="muted">Per serving</small>
+                <div className="nutrition-editor readonly nutrition-editor-compact">
+                  <div className="metric-tile metric-tile-compact">
+                    <span>Calories</span>
+                    <strong>{formatTwoDecimals(selectedVersion.nutritionPerServing.calories)}</strong>
+                  </div>
+                  <div className="metric-tile metric-tile-compact">
+                    <span>Protein</span>
+                    <strong>{formatTwoDecimals(selectedVersion.nutritionPerServing.protein)}g</strong>
+                  </div>
+                  <div className="metric-tile metric-tile-compact">
+                    <span>Carbs</span>
+                    <strong>{formatTwoDecimals(selectedVersion.nutritionPerServing.carbs)}g</strong>
+                  </div>
+                  <div className="metric-tile metric-tile-compact">
+                    <span>Fat</span>
+                    <strong>{formatTwoDecimals(selectedVersion.nutritionPerServing.fat)}g</strong>
+                  </div>
+                </div>
+              </div>
+              <div className="nutrition-group">
+                <small className="muted">Whole recipe</small>
+                <div className="nutrition-editor readonly nutrition-editor-compact">
+                  <div className="metric-tile metric-tile-compact">
+                    <span>Calories</span>
+                    <strong>{formatTwoDecimals(selectedVersion.nutritionPerServing.calories * selectedVersion.servings)}</strong>
+                  </div>
+                  <div className="metric-tile metric-tile-compact">
+                    <span>Protein</span>
+                    <strong>{formatTwoDecimals(selectedVersion.nutritionPerServing.protein * selectedVersion.servings)}g</strong>
+                  </div>
+                  <div className="metric-tile metric-tile-compact">
+                    <span>Carbs</span>
+                    <strong>{formatTwoDecimals(selectedVersion.nutritionPerServing.carbs * selectedVersion.servings)}g</strong>
+                  </div>
+                  <div className="metric-tile metric-tile-compact">
+                    <span>Fat</span>
+                    <strong>{formatTwoDecimals(selectedVersion.nutritionPerServing.fat * selectedVersion.servings)}g</strong>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <p className="muted">
@@ -2541,7 +2732,6 @@ function WeeklyTab(props: {
               <div className="panel-header">
                 <h4>Ingredients</h4>
                 <div className="action-row">
-                  <span className="muted">Weekly edits stay on this dated version.</span>
                   <button
                     className="secondary-button"
                     onClick={() => onAddIngredientToVersion(selectedVersion.id)}
@@ -2550,18 +2740,109 @@ function WeeklyTab(props: {
                   </button>
                   <button
                     className="secondary-button"
+                    onClick={handleAddSubtitleForVersion}
+                  >
+                    Add subtitle
+                  </button>
+                  <button
+                    className="secondary-button"
                     onClick={onOpenIngredientDb}
                   >
                     Ingredient database
                   </button>
+                  <label className="factor-field">
+                    <button
+                      type="button"
+                      className="factor-input-action"
+                      onClick={handleMultiplyIngredients}
+                      aria-label="Multiply ingredient quantities"
+                      title="Multiply ingredient quantities"
+                    >
+                      x
+                    </button>
+                    <input
+                      type="number"
+                      min={0.1}
+                      step={0.1}
+                      value={multiplyInput}
+                      placeholder="factor"
+                      onChange={(event) => setMultiplyInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') handleMultiplyIngredients()
+                      }}
+                    />
+                  </label>
+                  <label className="factor-field">
+                    <button
+                      type="button"
+                      className="factor-input-action"
+                      onClick={handleDivideIngredients}
+                      aria-label="Divide ingredient quantities"
+                      title="Divide ingredient quantities"
+                    >
+                      ÷
+                    </button>
+                    <input
+                      type="number"
+                      min={0.1}
+                      step={0.1}
+                      value={divideInput}
+                      placeholder="factor"
+                      onChange={(event) => setDivideInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') handleDivideIngredients()
+                      }}
+                    />
+                  </label>
                 </div>
               </div>
-              {sortedVersionIngredients.map((ingredient) => {
+              {sortedVersionIngredients.map((ingredient, index) => {
                 const lineNutrition = getIngredientLineNutrition(ingredient)
+                const group = getIngredientGroupLabel(ingredient)
+                const previousGroup = getIngredientGroupLabel(
+                  sortedVersionIngredients[index - 1],
+                )
+                const showGroupHeading = group !== 'main' && group !== previousGroup
                 return (
-                <div key={ingredient.id} className="ingredient-row">
+                <div
+                  key={ingredient.id}
+                  className="ingredient-row ingredient-row-compact"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => {
+                    if (!selectedVersion || !draggedVersionIngredientId) return
+                    onMoveIngredientInVersion(
+                      selectedVersion.id,
+                      draggedVersionIngredientId,
+                      ingredient.id,
+                    )
+                    setDraggedVersionIngredientId(null)
+                  }}
+                >
+                  {showGroupHeading ? (
+                    <small className="ingredient-group-heading">
+                      {group}
+                      <button
+                        type="button"
+                        className="ingredient-group-remove"
+                        onClick={() =>
+                          onClearIngredientGroupInVersion(selectedVersion.id, group)
+                        }
+                        title="Remove subtitle"
+                        aria-label={`Remove subtitle ${group}`}
+                      >
+                        <svg
+                          className="ingredient-group-remove-icon"
+                          viewBox="0 0 12 12"
+                          aria-hidden="true"
+                        >
+                          <path d="M2 2L10 10M10 2L2 10" />
+                        </svg>
+                      </button>
+                    </small>
+                  ) : null}
                   <div className="ingredient-controls ingredient-controls-compact">
                     <select
+                      className="ingredient-name-input"
                       aria-label="Ingredient"
                       value={ingredient.name}
                       onChange={(event) =>
@@ -2578,6 +2859,7 @@ function WeeklyTab(props: {
                       ))}
                     </select>
                     <input
+                      className="ingredient-amount-input"
                       aria-label="Ingredient amount"
                       type="number"
                       value={ingredient.quantity ?? ''}
@@ -2589,6 +2871,7 @@ function WeeklyTab(props: {
                       }
                     />
                     <select
+                      className="ingredient-unit-input"
                       aria-label="Ingredient unit"
                       value={ingredient.unit ?? ''}
                       onChange={(event) =>
@@ -2615,6 +2898,34 @@ function WeeklyTab(props: {
                     >
                       X
                     </button>
+                    <button
+                      type="button"
+                      className="secondary-button ingredient-replace"
+                      onClick={() => {
+                        if (!selectedVersion) return
+                        const replacement = window
+                          .prompt('Replace ingredient with:', ingredient.name)
+                          ?.trim()
+                        if (!replacement) return
+                        onUpdateIngredient(selectedVersion.id, ingredient.id, {
+                          name: replacement,
+                        })
+                      }}
+                      title="Replace ingredient"
+                      aria-label="Replace ingredient"
+                    >
+                      R
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button ingredient-drag"
+                      draggable
+                      onDragStart={() => setDraggedVersionIngredientId(ingredient.id)}
+                      onDragEnd={() => setDraggedVersionIngredientId(null)}
+                      title="Drag to reorder"
+                    >
+                      ::
+                    </button>
                   </div>
                   <small className="ingredient-micro-macros">
                     {lineNutrition.isResolved
@@ -2631,6 +2942,8 @@ function WeeklyTab(props: {
             </div>
 
           </div>
+            ) : null}
+          </>
         ) : (
           <p className="muted">Pick a recipe version to edit it.</p>
         )}
@@ -2671,6 +2984,52 @@ function WeeklyTab(props: {
             </div>
           </div>
         </div>
+
+        {unassignedBoxes.length > 0 || unassignedExtras.length > 0 ? (
+          <div className="planner-pools">
+            {unassignedBoxes.length > 0 ? (
+              <section ref={unassignedBoxesRef} className="planner-pool">
+                <div className="panel-header">
+                  <div>
+                    <h4>Assign meal to week</h4>
+                  </div>
+                  <span className="badge">{unassignedBoxes.length}</span>
+                </div>
+                <div className="pool-grid">
+                  {unassignedBoxes.map((box) => (
+                    <BoxCard
+                      key={box.id}
+                      box={box}
+                      onFractionChange={(value) => onUpdateBoxFraction(box.id, value)}
+                      onDragStart={() => onSetDraggedItem({ kind: 'box', id: box.id })}
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            {unassignedExtras.length > 0 ? (
+              <section className="planner-pool">
+                <div className="panel-header">
+                  <div>
+                    <h4>Assign extra to week</h4>
+                  </div>
+                  <span className="badge">{unassignedExtras.length}</span>
+                </div>
+                <div className="pool-grid extras-grid">
+                  {unassignedExtras.map((extra) => (
+                    <ExtraCard
+                      key={extra.id}
+                      extra={extra}
+                      onDragStart={() => onSetDraggedItem({ kind: 'extra', id: extra.id })}
+                      onDelete={() => onDeleteExtra(extra.id)}
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="planner-scroll">
           <div className="planner-grid">
@@ -2731,14 +3090,14 @@ function WeeklyTab(props: {
                     {formatCalories(daySummary.planned.calories)} planned / {formatCalories(target)} target
                   </span>
                   <span className="muted">
-                    Target: {macroTarget.protein}P / {macroTarget.carbs}C / {macroTarget.fat}F
+                    Planned: {formatMacroInteger(daySummary.planned.protein)}P /{' '}
+                    {formatMacroInteger(daySummary.planned.carbs)}C /{' '}
+                    {formatMacroInteger(daySummary.planned.fat)}F
                   </span>
-                  <span>
-                    Consumed: {daySummary.consumed.calories} kcal
-                  </span>
-                  <span>
-                    {daySummary.consumed.protein}P / {daySummary.consumed.carbs}C /{' '}
-                    {daySummary.consumed.fat}F
+                  <span className="muted">
+                    Target: {formatMacroInteger(macroTarget.protein)}P /{' '}
+                    {formatMacroInteger(macroTarget.carbs)}C /{' '}
+                    {formatMacroInteger(macroTarget.fat)}F
                   </span>
                 </div>
               )
@@ -2747,58 +3106,6 @@ function WeeklyTab(props: {
         </div>
 
         <div className="planner-pools">
-          <section className="planner-pool">
-            <div className="panel-header">
-              <div>
-                <h4>Unassigned Recipe Boxes</h4>
-                <p className="muted">These boxes are ready to drag into the week.</p>
-              </div>
-              <span className="badge">{unassignedBoxes.length}</span>
-            </div>
-            {unassignedBoxes.length > 0 ? (
-              <div className="pool-grid">
-                {unassignedBoxes.map((box) => (
-                  <BoxCard
-                    key={box.id}
-                    box={box}
-                    onFractionChange={(value) => onUpdateBoxFraction(box.id, value)}
-                    onDragStart={() => onSetDraggedItem({ kind: 'box', id: box.id })}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="muted">
-                All current recipe boxes are assigned in the planner. Unassign one to bring it back here.
-              </p>
-            )}
-          </section>
-
-          <section className="planner-pool">
-            <div className="panel-header">
-              <div>
-                <h4>Unassigned Extras</h4>
-                <p className="muted">Unassign an extra snack first, then delete it from this pool if needed.</p>
-              </div>
-              <span className="badge">{unassignedExtras.length}</span>
-            </div>
-            {unassignedExtras.length > 0 ? (
-              <div className="pool-grid extras-grid">
-                {unassignedExtras.map((extra) => (
-                  <ExtraCard
-                    key={extra.id}
-                    extra={extra}
-                    onDragStart={() => onSetDraggedItem({ kind: 'extra', id: extra.id })}
-                    onDelete={() => onDeleteExtra(extra.id)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="muted">
-                No unassigned extras right now. Add one from the left sidebar or unassign one from the week.
-              </p>
-            )}
-          </section>
-
           <section className="planner-pool">
             <div className="panel-header">
               <div>
@@ -2947,6 +3254,7 @@ function RecipesTab({
   onUpdateTemplateIngredient,
   onAddIngredientToTemplate,
   onRemoveIngredientFromTemplate,
+  onClearIngredientGroupInTemplate,
   onOpenIngredientDb,
   onSaveTemplateAsNewDefault,
   onAddVersion,
@@ -2962,16 +3270,44 @@ function RecipesTab({
     lineId: string,
     patch: Partial<IngredientLine>,
   ) => void
-  onAddIngredientToTemplate: (templateId: string) => void
+  onAddIngredientToTemplate: (templateId: string, group?: string) => void
   onRemoveIngredientFromTemplate: (templateId: string, lineId: string) => void
+  onClearIngredientGroupInTemplate: (templateId: string, group: string) => void
   onOpenIngredientDb: () => void
   onSaveTemplateAsNewDefault: (template: RecipeTemplate) => void
   onAddVersion: (template: RecipeTemplate) => void
 }) {
   const sortedIngredientDb = sortIngredientRecords(ingredientDb)
   const sortedTemplateIngredients = selectedTemplate
-    ? sortIngredientLinesForRecipe(selectedTemplate.ingredients)
+    ? selectedTemplate.ingredients
     : []
+  const orderedTemplates = selectedTemplate
+    ? [
+        ...templates.filter((template) => template.id !== selectedTemplate.id),
+        selectedTemplate,
+      ]
+    : templates
+  const [isSelectedTemplateExpanded, setIsSelectedTemplateExpanded] = useState(false)
+
+  useEffect(() => {
+    setIsSelectedTemplateExpanded(false)
+  }, [selectedTemplate?.id])
+
+  function handleAddTemplateSubtitle() {
+    if (!selectedTemplate) return
+    const subtitle = window.prompt('Subtitle name:')?.trim()
+    if (!subtitle) return
+    onAddIngredientToTemplate(selectedTemplate.id, subtitle)
+  }
+
+  function handleToggleTemplate(templateId: string) {
+    if (selectedTemplate?.id === templateId) {
+      setIsSelectedTemplateExpanded((current) => !current)
+      return
+    }
+    onSelectTemplate(templateId)
+    setIsSelectedTemplateExpanded(true)
+  }
 
   return (
     <section className="page-grid">
@@ -2986,14 +3322,17 @@ function RecipesTab({
         </div>
 
         <div className="version-list">
-          {templates.map((template) => (
+          {orderedTemplates.map((template) => (
             <button
               key={template.id}
               className={selectedTemplate?.id === template.id ? 'version-card active' : 'version-card'}
-              onClick={() => onSelectTemplate(template.id)}
+              onClick={() => handleToggleTemplate(template.id)}
             >
               <div>
-                <h4>{template.name}</h4>
+                <h4>
+                  {template.name}{' '}
+                  <span className="inline-arrow">▾</span>
+                </h4>
                 <p className="muted">{template.description}</p>
               </div>
               <div className="mini-metrics">
@@ -3006,11 +3345,10 @@ function RecipesTab({
       </div>
 
       <div className="surface">
-        {selectedTemplate ? (
+        {selectedTemplate && isSelectedTemplateExpanded ? (
           <div className="editor">
             <div className="panel-header">
               <div>
-                <h3>{selectedTemplate.name}</h3>
                 <p className="muted">Edit the reusable defaults here, then copy this recipe into any week when you need it.</p>
               </div>
               <div className="action-row">
@@ -3149,6 +3487,12 @@ function RecipesTab({
                   </button>
                   <button
                     className="secondary-button"
+                    onClick={handleAddTemplateSubtitle}
+                  >
+                    Add subtitle
+                  </button>
+                  <button
+                    className="secondary-button"
                     onClick={onOpenIngredientDb}
                   >
                     Ingredient database
@@ -3156,12 +3500,43 @@ function RecipesTab({
                 </div>
               </div>
 
-              {sortedTemplateIngredients.map((ingredient) => {
+              {sortedTemplateIngredients.map((ingredient, index) => {
                 const lineNutrition = getIngredientLineNutrition(ingredient)
+                const group = getIngredientGroupLabel(ingredient)
+                const previousGroup = getIngredientGroupLabel(
+                  sortedTemplateIngredients[index - 1],
+                )
+                const showGroupHeading = group !== 'main' && group !== previousGroup
                 return (
-                <div key={ingredient.id} className="ingredient-row">
+                <div
+                  key={ingredient.id}
+                  className="ingredient-row ingredient-row-compact"
+                >
+                  {showGroupHeading ? (
+                    <small className="ingredient-group-heading">
+                      {group}
+                      <button
+                        type="button"
+                        className="ingredient-group-remove"
+                        onClick={() =>
+                          onClearIngredientGroupInTemplate(selectedTemplate.id, group)
+                        }
+                        title="Remove subtitle"
+                        aria-label={`Remove subtitle ${group}`}
+                      >
+                        <svg
+                          className="ingredient-group-remove-icon"
+                          viewBox="0 0 12 12"
+                          aria-hidden="true"
+                        >
+                          <path d="M2 2L10 10M10 2L2 10" />
+                        </svg>
+                      </button>
+                    </small>
+                  ) : null}
                   <div className="ingredient-controls ingredient-controls-compact">
                     <select
+                      className="ingredient-name-input"
                       aria-label="Ingredient"
                       value={ingredient.name}
                       onChange={(event) =>
@@ -3178,6 +3553,7 @@ function RecipesTab({
                       ))}
                     </select>
                     <input
+                      className="ingredient-amount-input"
                       aria-label="Ingredient amount"
                       type="number"
                       value={ingredient.quantity ?? ''}
@@ -3189,6 +3565,7 @@ function RecipesTab({
                       }
                     />
                     <select
+                      className="ingredient-unit-input"
                       aria-label="Ingredient unit"
                       value={ingredient.unit ?? ''}
                       onChange={(event) =>
@@ -3214,6 +3591,24 @@ function RecipesTab({
                       title="Remove ingredient"
                     >
                       X
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button ingredient-replace"
+                      onClick={() => {
+                        if (!selectedTemplate) return
+                        const replacement = window
+                          .prompt('Replace ingredient with:', ingredient.name)
+                          ?.trim()
+                        if (!replacement) return
+                        onUpdateTemplateIngredient(selectedTemplate.id, ingredient.id, {
+                          name: replacement,
+                        })
+                      }}
+                      title="Replace ingredient"
+                      aria-label="Replace ingredient"
+                    >
+                      R
                     </button>
                   </div>
                   <small className="ingredient-micro-macros">

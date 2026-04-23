@@ -112,6 +112,7 @@ button {
 }
 
 .brand h1,
+.hero h1,
 .hero h2,
 .surface h3,
 .surface h4 {
@@ -254,6 +255,78 @@ button {
   flex-wrap: wrap;
 }
 
+.version-quick-actions {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.version-quick-actions label {
+  display: grid;
+  gap: 6px;
+}
+
+.version-quick-actions input {
+  width: 86px;
+}
+
+.week-notes-inline {
+  min-width: min(520px, 58vw);
+}
+
+.week-notes-inline input {
+  width: 100%;
+}
+
+.factor-field {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+}
+
+.factor-input-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  min-width: 10px;
+  text-align: center;
+}
+
+.factor-input-action {
+  min-width: 20px;
+  height: 24px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(31, 27, 23, 0.08);
+  color: var(--text);
+  font-size: 0.82rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 6px;
+}
+
+.ingredient-table .panel-header h4 {
+  font-size: 2rem;
+}
+
+.ingredient-table .panel-header .action-row .secondary-button {
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 0.76rem;
+}
+
+.ingredient-table .panel-header .action-row .factor-field input {
+  width: 72px;
+  min-height: 30px;
+  padding: 6px 8px;
+  font-size: 0.78rem;
+}
+
+.version-editor-toggle {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .secondary-button {
   background: rgba(31, 27, 23, 0.08) !important;
   color: var(--text) !important;
@@ -319,6 +392,13 @@ button {
   font-size: 0.82rem;
 }
 
+.inline-arrow {
+  display: inline-block;
+  font-size: 1.18rem;
+  line-height: 1;
+  color: var(--muted);
+}
+
 .page-grid {
   display: grid;
   grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
@@ -332,6 +412,10 @@ button {
 
 .weekly-grid .versions-panel {
   grid-column: 1;
+}
+
+.weekly-grid .versions-panel .panel-header {
+  margin-bottom: 10px;
 }
 
 .weekly-grid .planner-panel {
@@ -373,6 +457,10 @@ button {
   gap: 12px;
 }
 
+.version-editor-expanded {
+  margin-top: 10px;
+}
+
 .grid-two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -402,6 +490,36 @@ button {
 .metric-tile span {
   color: var(--muted);
   font-size: 0.78rem;
+}
+
+.nutrition-dual {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.nutrition-group {
+  display: grid;
+  gap: 6px;
+}
+
+.nutrition-editor-compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.metric-tile-compact {
+  padding: 8px;
+  border-radius: 12px;
+  gap: 4px;
+}
+
+.metric-tile-compact span {
+  font-size: 0.68rem;
+}
+
+.metric-tile-compact strong {
+  font-size: 0.95rem;
 }
 
 .ingredient-row {
@@ -457,9 +575,9 @@ button {
 }
 
 .ingredient-controls-compact {
-  grid-template-columns: minmax(0, 1.9fr) 64px 88px 34px;
+  grid-template-columns: minmax(0, 2.4fr) minmax(44px, 0.7fr) minmax(54px, 0.9fr) 26px 26px 26px;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .ingredient-controls-compact label {
@@ -475,16 +593,40 @@ button {
 }
 
 .ingredient-remove {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
   padding: 0;
-  border-radius: 9px;
-  justify-self: end;
+  border-radius: 8px;
+  justify-self: start;
   align-self: center;
   font-weight: 700;
   line-height: 1;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
+}
+
+.ingredient-replace {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  justify-self: start;
+}
+
+.ingredient-drag {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  padding: 0;
+  border-radius: 8px;
+  cursor: grab;
+  font-size: 0.8rem;
+  line-height: 1;
+  justify-self: start;
 }
 
 .ingredient-nutrition-grid {
@@ -515,6 +657,48 @@ button {
   font-size: 0.61rem;
   line-height: 1.15;
   color: var(--muted);
+}
+
+.ingredient-row-compact {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.ingredient-group-heading {
+  font-size: 0.92rem;
+  line-height: 1.2;
+  color: var(--accent-strong);
+  font-weight: 600;
+  font-family: 'Fraunces', serif;
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ingredient-group-remove {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: currentColor;
+  opacity: 0.42;
+  line-height: 0;
+  cursor: pointer;
+}
+
+.ingredient-group-remove-icon {
+  width: 8px;
+  height: 8px;
+  display: block;
+  stroke: currentColor;
+  stroke-width: 1.15;
+  stroke-linecap: round;
+  fill: none;
 }
 
 .ingredient-ribbon {
@@ -832,6 +1016,7 @@ button {
 .planner-scroll {
   overflow-x: auto;
   padding-bottom: 4px;
+  margin-top: 20px;
 }
 
 .shopping-group {
@@ -859,15 +1044,13 @@ button {
   gap: 8px;
 }
 
-.shopping-group li,
-.version-total {
+.shopping-group li {
   display: flex;
   justify-content: space-between;
   gap: 12px;
 }
 
 .week-summary-card,
-.version-total,
 .weekly-totals,
 .stat-card {
   border-radius: 20px;
@@ -880,7 +1063,6 @@ button {
     linear-gradient(135deg, rgba(245, 197, 76, 0.28), rgba(107, 212, 191, 0.22));
 }
 
-.version-total,
 .weekly-totals {
   padding: 14px;
   background: linear-gradient(135deg, rgba(107, 212, 191, 0.18), rgba(199, 239, 99, 0.2));
@@ -1012,6 +1194,10 @@ textarea {
   .ingredient-controls {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .ingredient-controls-compact {
+    grid-template-columns: minmax(0, 2.2fr) minmax(42px, 0.7fr) minmax(52px, 0.9fr) 26px 26px 26px;
+  }
 }
 
 @media (max-width: 1380px) {
@@ -1077,8 +1263,8 @@ textarea {
   .planner-grid,
   .grid-two,
   .nutrition-editor,
+  .nutrition-dual,
   .ingredient-controls,
-  .ingredient-controls-compact,
   .ingredient-nutrition-grid,
   .template-columns,
   .stats-grid,
@@ -1090,6 +1276,15 @@ textarea {
 
   .nutrition-editor.readonly {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nutrition-editor-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ingredient-controls-compact {
+    grid-template-columns: minmax(0, 2fr) minmax(40px, 0.7fr) minmax(48px, 0.9fr) 24px 24px 24px;
+    gap: 3px;
   }
 
   .shopping-actions {
