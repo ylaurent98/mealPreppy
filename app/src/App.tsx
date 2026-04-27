@@ -979,15 +979,11 @@ function App() {
   const weekEntries = state.entries.filter((entry) =>
     selectedWeek?.entryIds.includes(entry.id),
   )
-  const weekBoxes = state.boxes.filter((box) => selectedWeek?.boxIds.includes(box.id))
   const weekExtras = state.extras.filter((extra) => selectedWeek?.extraFoodIds.includes(extra.id))
   const selectedVersion =
     state.versions.find((version) => version.id === selectedVersionId) ?? weekVersions[0] ?? null
   const selectedTemplate =
     state.templates.find((template) => template.id === selectedTemplateId) ?? state.templates[0] ?? null
-  const unassignedBoxes = weekBoxes.filter(
-    (box) => !weekEntries.some((entry) => entry.sourceType === 'box' && entry.sourceId === box.id),
-  )
   const unassignedExtras = weekExtras.filter(
     (extra) => !weekEntries.some((entry) => entry.sourceType === 'extra' && entry.sourceId === extra.id),
   )
@@ -1696,29 +1692,6 @@ function App() {
 
   }
 
-  function unassignBox(boxId: string) {
-    if (!selectedWeek) return
-    updateState((current) => {
-      const linkedEntry = current.entries.find(
-        (entry) =>
-          entry.weekStart === selectedWeek.weekStart &&
-          entry.sourceType === 'box' &&
-          entry.sourceId === boxId,
-      )
-      if (!linkedEntry) return current
-
-      return {
-        ...current,
-        entries: current.entries.filter((entry) => entry.id !== linkedEntry.id),
-        weeks: current.weeks.map((week) =>
-          week.weekStart === selectedWeek.weekStart
-            ? { ...week, entryIds: week.entryIds.filter((id) => id !== linkedEntry.id) }
-            : week,
-        ),
-      }
-    })
-  }
-
   function removeRecipeVersionFromWeek(versionId: string) {
     if (!selectedWeek) return
     const versionName =
@@ -2346,11 +2319,9 @@ function App() {
             onScaleVersionIngredients={(version, factor) =>
               updateVersion(version.id, (current) => scaleVersionIngredients(current, factor))
             }
-            unassignedBoxes={unassignedBoxes}
             unassignedExtras={unassignedExtras}
             onAssignBox={assignBox}
             onAssignExtra={assignExtra}
-            onUnassignBox={unassignBox}
             draggedItem={draggedItem}
             onSetDraggedItem={setDraggedItem}
             onClearDraggedItem={() => setDraggedItem(null)}
@@ -2514,11 +2485,9 @@ function WeeklyTab(props: {
   onSaveVersionAsNewDefault: (version: RecipeVersion) => void
   onVersionServings: (version: RecipeVersion, servings: number) => void
   onScaleVersionIngredients: (version: RecipeVersion, factor: number) => void
-  unassignedBoxes: AppState['boxes']
   unassignedExtras: AppState['extras']
   onAssignBox: (boxId: string, dayIndex: number, mealType: MealType) => void
   onAssignExtra: (extraId: string, dayIndex: number, mealType: MealType) => void
-  onUnassignBox: (boxId: string) => void
   draggedItem: DraggedItem
   onSetDraggedItem: (item: DraggedItem) => void
   onClearDraggedItem: () => void
@@ -2559,11 +2528,9 @@ function WeeklyTab(props: {
     onSaveVersionAsNewDefault,
     onVersionServings,
     onScaleVersionIngredients,
-    unassignedBoxes,
     unassignedExtras,
     onAssignBox,
     onAssignExtra,
-    onUnassignBox,
     draggedItem,
     onSetDraggedItem,
     onClearDraggedItem,
@@ -2617,12 +2584,45 @@ function WeeklyTab(props: {
   const [multiplyInput, setMultiplyInput] = useState('')
   const [divideInput, setDivideInput] = useState('')
   const [draggedVersionIngredientId, setDraggedVersionIngredientId] = useState<string | null>(null)
-  const unassignedBoxesRef = useRef<HTMLElement | null>(null)
   const weekDateInputRef = useRef<HTMLInputElement | null>(null)
+  const versionCardRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [servingsInput, setServingsInput] = useState(
     selectedVersion ? String(selectedVersion.servings) : '',
   )
+  const [isMobilePlanner, setIsMobilePlanner] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 760,
+  )
+  const [mobileAssignTarget, setMobileAssignTarget] = useState<{
+    dayIndex: number
+    mealType: MealType
+  } | null>(null)
   const weekRangeLabel = `${shortDateLabel(selectedWeek.weekStart)} → ${shortDateLabel(addDays(selectedWeek.weekStart, 6))}`
+  const weekBoxes = useMemo(
+    () => state.boxes.filter((box) => box.weekStart === selectedWeek.weekStart),
+    [state.boxes, selectedWeek.weekStart],
+  )
+  const assignedWeekBoxIds = useMemo(
+    () =>
+      new Set(
+        weekEntries
+          .filter((entry) => entry.sourceType === 'box')
+          .map((entry) => entry.sourceId),
+      ),
+    [weekEntries],
+  )
+  const mobileAvailableBoxes = useMemo(
+    () => weekBoxes.filter((box) => !assignedWeekBoxIds.has(box.id)),
+    [weekBoxes, assignedWeekBoxIds],
+  )
+  const mobileHasAvailableMeals =
+    mobileAvailableBoxes.length > 0 || unassignedExtras.length > 0
+  const versionNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    weekVersions.forEach((version) => {
+      map.set(version.id, version.name)
+    })
+    return map
+  }, [weekVersions])
 
   useEffect(() => {
     setDraggedVersionIngredientId(null)
@@ -2634,9 +2634,44 @@ function WeeklyTab(props: {
     setServingsInput(String(selectedVersion.servings))
   }, [selectedVersion?.servings])
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 760px)')
+    const sync = () => setIsMobilePlanner(mediaQuery.matches)
+    sync()
+    mediaQuery.addEventListener('change', sync)
+    return () => mediaQuery.removeEventListener('change', sync)
+  }, [])
+
+  useEffect(() => {
+    if (!isMobilePlanner) {
+      setMobileAssignTarget(null)
+    }
+  }, [isMobilePlanner])
+
+  function assignFromMobileTarget(sourceType: 'box' | 'extra', sourceId: string) {
+    if (!mobileAssignTarget) return
+    if (sourceType === 'box') {
+      onAssignBox(sourceId, mobileAssignTarget.dayIndex, mobileAssignTarget.mealType)
+    } else {
+      onAssignExtra(sourceId, mobileAssignTarget.dayIndex, mobileAssignTarget.mealType)
+    }
+    setMobileAssignTarget(null)
+  }
+
   function handleToggleVersion(versionId: string) {
+    const scrollToVersion = () => {
+      const node = versionCardRefs.current[versionId]
+      if (!node) return
+      node.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
+      const top = node.getBoundingClientRect().top + window.scrollY - 14
+      window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+    }
+
     if (selectedVersion?.id === versionId) {
       setIsSelectedVersionExpanded((current) => !current)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(scrollToVersion)
+      })
       return
     }
     onSelectVersion(versionId)
@@ -2644,6 +2679,9 @@ function WeeklyTab(props: {
     setMultiplyInput('')
     setDivideInput('')
     setDraggedVersionIngredientId(null)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(scrollToVersion)
+    })
   }
 
   function commitServingsInput() {
@@ -2695,9 +2733,6 @@ function WeeklyTab(props: {
     if (!selectedVersion) return
     onHandleMake(selectedVersion)
     setIsSelectedVersionExpanded(false)
-    setTimeout(() => {
-      unassignedBoxesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 0)
   }
 
   return (
@@ -2733,6 +2768,9 @@ function WeeklyTab(props: {
             return (
               <div
                 key={version.id}
+                ref={(node) => {
+                  versionCardRefs.current[version.id] = node
+                }}
                 className={selectedVersion?.id === version.id ? 'version-card active' : 'version-card'}
                 onClick={() => handleToggleVersion(version.id)}
                 role="button"
@@ -2747,20 +2785,32 @@ function WeeklyTab(props: {
                 <div className="version-card-row">
                   <h4>
                     {version.name}{' '}
-                    <span className="inline-arrow">?</span>
+                    <span className="inline-arrow">▾</span>
                   </h4>
-                  <button
-                    type="button"
-                    className="version-remove-button"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onRemoveVersionFromWeek(version.id)
-                    }}
-                    aria-label={`Remove ${version.name}`}
-                    title="Remove recipe from this week"
-                  >
-                    ×
-                  </button>
+                  <div className="version-card-actions">
+                    {versionBoxes.length > 0 ? (
+                      <button
+                        type="button"
+                        className="version-made-pill"
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label={`${version.name} has made boxes`}
+                      >
+                        ✓ Made
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="version-remove-button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onRemoveVersionFromWeek(version.id)
+                      }}
+                      aria-label={`Remove ${version.name}`}
+                      title="Remove recipe from this week"
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
                 <div className="version-card-meta">
                   <span>{Math.round(version.nutritionPerServing.calories)}kc</span>
@@ -2774,28 +2824,30 @@ function WeeklyTab(props: {
                 <div className="version-card-boxes">
                   {versionBoxes.length > 0 ? (
                     versionBoxes.map((box) => {
-                      const isUsed = assignedBoxIds.has(box.id)
-                      return (
-                        <button
+                      const isAssigned = assignedBoxIds.has(box.id)
+                      return isAssigned ? (
+                        <div
                           key={box.id}
-                          type="button"
-                          className={
-                            isUsed
-                              ? `recipe-box-mini box-model-${model} is-used`
-                              : `recipe-box-mini box-model-${model}`
-                          }
-                          draggable
-                          onDragStart={(event) => {
-                            event.stopPropagation()
+                          className="box-card box-card-assigned-placeholder"
+                          aria-label={`Assigned box ${box.boxNumber}`}
+                        />
+                      ) : (
+                        <BoxCard
+                          key={box.id}
+                          box={box}
+                          modelNumber={model}
+                          hideMetrics
+                          hidePortionControl
+                          titleOverride={version.name}
+                          assignedTone
+                          recipeTop
+                          stopPropagationOnClick
+                          stopPropagationOnDragStart
+                          onFractionChange={(value) => onUpdateBoxFraction(box.id, value)}
+                          onDragStart={() => {
                             onSetDraggedItem({ kind: 'box', id: box.id })
                           }}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                          }}
-                          aria-label={`${version.name} box ${box.boxNumber}`}
-                        >
-                          <span className="mini-lid" aria-hidden="true" />
-                        </button>
+                        />
                       )
                     })
                   ) : (
@@ -3236,44 +3288,8 @@ function WeeklyTab(props: {
           </div>
         </div>
 
-        {unassignedBoxes.length > 0 || unassignedExtras.length > 0 ? (
+        {!isMobilePlanner && unassignedExtras.length > 0 ? (
           <div className="planner-pools">
-            {unassignedBoxes.length > 0 ? (
-              <section
-                ref={unassignedBoxesRef}
-                className="planner-pool"
-                onDragOver={(event) => {
-                  if (draggedItem?.kind === 'box') {
-                    event.preventDefault()
-                  }
-                }}
-                onDrop={() => {
-                  if (draggedItem?.kind !== 'box') return
-                  onUnassignBox(draggedItem.id)
-                  onClearDraggedItem()
-                }}
-              >
-                <div className="panel-header">
-                  <div>
-                    <h4>Assign meal to week</h4>
-                    <p className="muted">Drag assigned boxes back here to unassign.</p>
-                  </div>
-                  <span className="badge">{unassignedBoxes.length}</span>
-                </div>
-                <div className="pool-grid">
-                  {unassignedBoxes.map((box) => (
-                    <BoxCard
-                      key={box.id}
-                      box={box}
-                      modelNumber={versionModelMap[box.recipeVersionId]}
-                      onFractionChange={(value) => onUpdateBoxFraction(box.id, value)}
-                      onDragStart={() => onSetDraggedItem({ kind: 'box', id: box.id })}
-                    />
-                  ))}
-                </div>
-              </section>
-            ) : null}
-
             {unassignedExtras.length > 0 ? (
               <section className="planner-pool">
                 <div className="panel-header">
@@ -3297,85 +3313,253 @@ function WeeklyTab(props: {
           </div>
         ) : null}
 
-        <div className="planner-scroll">
-          <div className="planner-grid">
-            <div className="planner-corner">Meal</div>
-            {dayNames.map((day, index) => {
-              const dayNumber = new Intl.DateTimeFormat(undefined, {
-                day: 'numeric',
-              }).format(new Date(`${addDays(selectedWeek.weekStart, index)}T00:00:00`))
-              return (
-                <div key={day} className="planner-day">
-                  <span>{day}</span>
-                  <strong>{dayNumber}</strong>
-                <label className="day-target-input">
-                  <span>tgt</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={selectedWeek.dailyCalorieTargets[index] ?? ''}
-                    placeholder={
-                      selectedWeek.defaultDailyCalorieTarget
-                        ? String(selectedWeek.defaultDailyCalorieTarget)
-                        : 'kcal'
-                    }
-                    onChange={(event) =>
-                      onUpdateDayCalorieTarget(
-                        index,
-                        event.target.value === '' ? null : Number(event.target.value),
-                      )
-                    }
-                  />
-                </label>
-                </div>
-              )
-            })}
+        {isMobilePlanner ? (
+          <>
+            <div className="planner-mobile-list">
+              {dayNames.map((day, dayIndex) => {
+                const dayNumber = new Intl.DateTimeFormat(undefined, {
+                  day: 'numeric',
+                }).format(new Date(`${addDays(selectedWeek.weekStart, dayIndex)}T00:00:00`))
+                const daySummary = buildDaySummary(dayIndex, weekEntries, state)
+                const target = selectedWeek.dailyCalorieTargets[dayIndex]
+                const macroTarget = macroTargetsFromCalories(
+                  target,
+                  selectedWeek.macroTargetPercentages,
+                )
+                return (
+                  <section key={`mobile-day-${dayIndex}`} className="planner-mobile-day">
+                    <div className="planner-mobile-day-head">
+                      <h4>
+                        {day}{' '}
+                        <span>{dayNumber}</span>
+                      </h4>
+                      <label className="day-target-input">
+                        <span>tgt</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={selectedWeek.dailyCalorieTargets[dayIndex] ?? ''}
+                          placeholder={
+                            selectedWeek.defaultDailyCalorieTarget
+                              ? String(selectedWeek.defaultDailyCalorieTarget)
+                              : 'kcal'
+                          }
+                          onChange={(event) =>
+                            onUpdateDayCalorieTarget(
+                              dayIndex,
+                              event.target.value === '' ? null : Number(event.target.value),
+                            )
+                          }
+                        />
+                      </label>
+                    </div>
+                    <div className="planner-mobile-meals">
+                      {mealTypes.map((mealType) => {
+                        const slotEntries = weekEntries.filter(
+                          (entry) =>
+                            entry.dayIndex === dayIndex && entry.mealType === mealType,
+                        )
+                        return (
+                          <div
+                            key={`mobile-${mealType}-${dayIndex}`}
+                            className="planner-mobile-meal-row"
+                          >
+                            <div className="meal-label planner-mobile-meal-label">
+                              {formatMealType(mealType)}
+                            </div>
+                            <div className="planner-mobile-slot">
+                              {slotEntries.length > 0 ? (
+                                slotEntries.map((entry) => (
+                                  <PlannerCard
+                                    key={entry.id}
+                                    entry={entry}
+                                    state={state}
+                                    versionModelMap={versionModelMap}
+                                    onRemove={() => onRemoveEntry(entry.id)}
+                                    onPortionChange={(value) => {
+                                      if (entry.sourceType === 'box') {
+                                        onUpdateBoxFraction(entry.sourceId, value)
+                                      }
+                                    }}
+                                  />
+                                ))
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="planner-mobile-assign"
+                                  onClick={() =>
+                                    setMobileAssignTarget({ dayIndex, mealType })
+                                  }
+                                  disabled={!mobileHasAvailableMeals}
+                                >
+                                  {mobileHasAvailableMeals ? 'Assign meal' : 'No meals available'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div className="planner-day-total planner-mobile-total">
+                      <span className="target-compare">
+                        {formatCalories(daySummary.planned.calories)} planned /{' '}
+                        {formatCalories(target)} target
+                      </span>
+                      <span className="muted">
+                        Planned: {formatMacroInteger(daySummary.planned.protein)}P /{' '}
+                        {formatMacroInteger(daySummary.planned.carbs)}C /{' '}
+                        {formatMacroInteger(daySummary.planned.fat)}F
+                      </span>
+                      <span className="muted">
+                        Target: {formatMacroInteger(macroTarget.protein)}P /{' '}
+                        {formatMacroInteger(macroTarget.carbs)}C /{' '}
+                        {formatMacroInteger(macroTarget.fat)}F
+                      </span>
+                    </div>
+                  </section>
+                )
+              })}
+            </div>
 
-            {mealTypes.map((mealType) => (
-              <MealRow
-                key={mealType}
-                mealType={mealType}
-                weekEntries={weekEntries}
-                state={state}
-                draggedItem={draggedItem}
-                onSetDraggedItem={onSetDraggedItem}
-                onAssignBox={onAssignBox}
-                onAssignExtra={onAssignExtra}
-                onClearDraggedItem={onClearDraggedItem}
-                onRemoveEntry={onRemoveEntry}
-                onUpdateBoxFraction={onUpdateBoxFraction}
-                versionModelMap={versionModelMap}
-              />
-            ))}
-
-            <div className="meal-label totals-label">Totals</div>
-            {dayNames.map((_, dayIndex) => {
-              const daySummary = buildDaySummary(dayIndex, weekEntries, state)
-              const target = selectedWeek.dailyCalorieTargets[dayIndex]
-              const macroTarget = macroTargetsFromCalories(
-                target,
-                selectedWeek.macroTargetPercentages,
-              )
-              return (
-                <div key={`totals-${dayIndex}`} className="planner-day-total">
-                  <span className="target-compare">
-                    {formatCalories(daySummary.planned.calories)} planned / {formatCalories(target)} target
-                  </span>
-                  <span className="muted">
-                    Planned: {formatMacroInteger(daySummary.planned.protein)}P /{' '}
-                    {formatMacroInteger(daySummary.planned.carbs)}C /{' '}
-                    {formatMacroInteger(daySummary.planned.fat)}F
-                  </span>
-                  <span className="muted">
-                    Target: {formatMacroInteger(macroTarget.protein)}P /{' '}
-                    {formatMacroInteger(macroTarget.carbs)}C /{' '}
-                    {formatMacroInteger(macroTarget.fat)}F
-                  </span>
+            {mobileAssignTarget ? (
+              <div
+                className="mobile-assign-sheet-backdrop"
+                onClick={() => setMobileAssignTarget(null)}
+                role="presentation"
+              >
+                <div
+                  className="mobile-assign-sheet"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Assign meal"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="panel-header">
+                    <h4>Assign meal</h4>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => setMobileAssignTarget(null)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <p className="muted">
+                    Unassigned meals available for{' '}
+                    {formatMealType(mobileAssignTarget.mealType)} on{' '}
+                    {dayNames[mobileAssignTarget.dayIndex]}.
+                  </p>
+                  <div className="mobile-assign-list">
+                    {mobileAvailableBoxes.map((box) => (
+                      <button
+                        key={`mobile-box-${box.id}`}
+                        type="button"
+                        className="secondary-button mobile-assign-option"
+                        onClick={() => assignFromMobileTarget('box', box.id)}
+                      >
+                        {versionNameById.get(box.recipeVersionId) ?? box.label} · Box{' '}
+                        {box.boxNumber}
+                      </button>
+                    ))}
+                    {unassignedExtras.map((extra) => (
+                      <button
+                        key={`mobile-extra-${extra.id}`}
+                        type="button"
+                        className="secondary-button mobile-assign-option"
+                        onClick={() => assignFromMobileTarget('extra', extra.id)}
+                      >
+                        {extra.name} · Extra
+                      </button>
+                    ))}
+                    {!mobileHasAvailableMeals ? (
+                      <span className="muted">No unassigned meals available yet.</span>
+                    ) : null}
+                  </div>
                 </div>
-              )
-            })}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="planner-scroll">
+            <div className="planner-grid">
+              <div className="planner-corner">Meal</div>
+              {dayNames.map((day, index) => {
+                const dayNumber = new Intl.DateTimeFormat(undefined, {
+                  day: 'numeric',
+                }).format(new Date(`${addDays(selectedWeek.weekStart, index)}T00:00:00`))
+                return (
+                  <div key={day} className="planner-day">
+                    <span>{day}</span>
+                    <strong>{dayNumber}</strong>
+                  <label className="day-target-input">
+                    <span>tgt</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={selectedWeek.dailyCalorieTargets[index] ?? ''}
+                      placeholder={
+                        selectedWeek.defaultDailyCalorieTarget
+                          ? String(selectedWeek.defaultDailyCalorieTarget)
+                          : 'kcal'
+                      }
+                      onChange={(event) =>
+                        onUpdateDayCalorieTarget(
+                          index,
+                          event.target.value === '' ? null : Number(event.target.value),
+                        )
+                      }
+                    />
+                  </label>
+                  </div>
+                )
+              })}
+
+              {mealTypes.map((mealType) => (
+                <MealRow
+                  key={mealType}
+                  mealType={mealType}
+                  weekEntries={weekEntries}
+                  state={state}
+                  draggedItem={draggedItem}
+                  onSetDraggedItem={onSetDraggedItem}
+                  onAssignBox={onAssignBox}
+                  onAssignExtra={onAssignExtra}
+                  onClearDraggedItem={onClearDraggedItem}
+                  onRemoveEntry={onRemoveEntry}
+                  onUpdateBoxFraction={onUpdateBoxFraction}
+                  versionModelMap={versionModelMap}
+                />
+              ))}
+
+              <div className="meal-label totals-label">Totals</div>
+              {dayNames.map((_, dayIndex) => {
+                const daySummary = buildDaySummary(dayIndex, weekEntries, state)
+                const target = selectedWeek.dailyCalorieTargets[dayIndex]
+                const macroTarget = macroTargetsFromCalories(
+                  target,
+                  selectedWeek.macroTargetPercentages,
+                )
+                return (
+                  <div key={`totals-${dayIndex}`} className="planner-day-total">
+                    <span className="target-compare">
+                      {formatCalories(daySummary.planned.calories)} planned / {formatCalories(target)} target
+                    </span>
+                    <span className="muted">
+                      Planned: {formatMacroInteger(daySummary.planned.protein)}P /{' '}
+                      {formatMacroInteger(daySummary.planned.carbs)}C /{' '}
+                      {formatMacroInteger(daySummary.planned.fat)}F
+                    </span>
+                    <span className="muted">
+                      Target: {formatMacroInteger(macroTarget.protein)}P /{' '}
+                      {formatMacroInteger(macroTarget.carbs)}C /{' '}
+                      {formatMacroInteger(macroTarget.fat)}F
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="planner-pools">
           <section className="planner-pool">

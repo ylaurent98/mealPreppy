@@ -88,27 +88,64 @@ export function BoxCard({
   onDragStart,
   selected,
   modelNumber,
+  hideMetrics,
+  hidePortionControl,
+  compact,
+  used,
+  stopPropagationOnClick,
+  stopPropagationOnDragStart,
+  titleOverride,
+  assignedTone,
+  recipeTop,
 }: {
   box: MealBox
-  onFractionChange: (value: number) => void
+  onFractionChange?: (value: number) => void
   onSelect?: () => void
   onDragStart?: () => void
   selected?: boolean
   modelNumber?: number
+  hideMetrics?: boolean
+  hidePortionControl?: boolean
+  compact?: boolean
+  used?: boolean
+  stopPropagationOnClick?: boolean
+  stopPropagationOnDragStart?: boolean
+  titleOverride?: string
+  assignedTone?: boolean
+  recipeTop?: boolean
 }) {
   const scaled = scaleNutrition(box.baseNutrition, box.portionFraction)
   const resolvedModelNumber = modelNumber ?? getModelNumber(box.recipeVersionId)
   const modelClass = `box-model-${resolvedModelNumber}`
+  const classes = [
+    'box-card',
+    'box-card-unassigned',
+    modelClass,
+    selected ? 'selected' : '',
+    compact ? 'box-card-compact' : '',
+    used ? 'box-card-used' : '',
+    assignedTone ? 'box-card-assigned-tone' : '',
+    recipeTop ? 'box-card-recipe-top' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
     <div
-      className={
-        selected
-          ? `box-card box-card-unassigned ${modelClass} selected`
-          : `box-card box-card-unassigned ${modelClass}`
-      }
+      className={classes}
       draggable={Boolean(onDragStart)}
-      onDragStart={onDragStart}
-      onClick={onSelect}
+      onDragStart={(event) => {
+        if (stopPropagationOnDragStart) {
+          event.stopPropagation()
+        }
+        onDragStart?.()
+      }}
+      onClick={(event) => {
+        if (stopPropagationOnClick) {
+          event.stopPropagation()
+        }
+        onSelect?.()
+      }}
     >
       <div className="box-sketch-blobs" aria-hidden="true">
         <svg viewBox="0 0 500 180" preserveAspectRatio="xMidYMid slice">
@@ -118,24 +155,28 @@ export function BoxCard({
       <div className="box-sheen" aria-hidden="true" />
       <div className="box-top">
         <strong>
-          #{box.boxNumber} {box.label}
+          {titleOverride ?? `#${box.boxNumber} ${box.label}`}
         </strong>
       </div>
-      <div className="box-metrics">
-        <span>{scaled.calories} kcal</span>
-        <span>{scaled.protein}P</span>
-        <span>{scaled.carbs}C</span>
-        <span>{scaled.fat}F</span>
-      </div>
-      <label>
-        {box.portionFraction >= 1 ? (
-          <button type="button" onClick={() => onFractionChange(0.5)}>
-            Split to 2 halves
-          </button>
-        ) : (
-          <span className="muted">Half portion</span>
-        )}
-      </label>
+      {hideMetrics ? null : (
+        <div className="box-metrics">
+          <span>{scaled.calories} kcal</span>
+          <span>{scaled.protein}P</span>
+          <span>{scaled.carbs}C</span>
+          <span>{scaled.fat}F</span>
+        </div>
+      )}
+      {hidePortionControl ? null : (
+        <label>
+          {box.portionFraction >= 1 ? (
+            <button type="button" onClick={() => onFractionChange?.(0.5)}>
+              Split
+            </button>
+          ) : (
+            <span className="muted">Half portion</span>
+          )}
+        </label>
+      )}
     </div>
   )
 }
@@ -202,7 +243,7 @@ export function PlannerCard({
           <label>
             {source.portionFraction >= 1 ? (
               <button type="button" onClick={() => onPortionChange(0.5)}>
-                Split to 2 halves
+                Split
               </button>
             ) : (
               <span className="muted">Half portion</span>

@@ -935,7 +935,11 @@ button {
   border-bottom: 1.5px solid rgba(43, 23, 17, 0.5);
   background:
     linear-gradient(rgba(43, 23, 17, 0.75), rgba(43, 23, 17, 0.75)) left 22px top 2px / 14px 5px no-repeat,
-    linear-gradient(rgba(43, 23, 17, 0.75), rgba(43, 23, 17, 0.75)) right 22px top 2px / 14px 5px no-repeat;
+    radial-gradient(circle, rgba(43, 23, 17, 0.75) 98%, transparent 100%) left 22px top 5px / 2px 2px no-repeat,
+    radial-gradient(circle, rgba(43, 23, 17, 0.75) 98%, transparent 100%) left 34px top 5px / 2px 2px no-repeat,
+    linear-gradient(rgba(43, 23, 17, 0.75), rgba(43, 23, 17, 0.75)) right 22px top 2px / 14px 5px no-repeat,
+    radial-gradient(circle, rgba(43, 23, 17, 0.75) 98%, transparent 100%) right 34px top 5px / 2px 2px no-repeat,
+    radial-gradient(circle, rgba(43, 23, 17, 0.75) 98%, transparent 100%) right 22px top 5px / 2px 2px no-repeat;
   z-index: 2;
   pointer-events: none;
 }
@@ -945,7 +949,11 @@ button {
   border-bottom-color: rgba(20, 36, 24, 0.5);
   background:
     linear-gradient(rgba(20, 36, 24, 0.72), rgba(20, 36, 24, 0.72)) left 22px top 2px / 14px 5px no-repeat,
-    linear-gradient(rgba(20, 36, 24, 0.72), rgba(20, 36, 24, 0.72)) right 22px top 2px / 14px 5px no-repeat;
+    radial-gradient(circle, rgba(20, 36, 24, 0.72) 98%, transparent 100%) left 22px top 5px / 2px 2px no-repeat,
+    radial-gradient(circle, rgba(20, 36, 24, 0.72) 98%, transparent 100%) left 34px top 5px / 2px 2px no-repeat,
+    linear-gradient(rgba(20, 36, 24, 0.72), rgba(20, 36, 24, 0.72)) right 22px top 2px / 14px 5px no-repeat,
+    radial-gradient(circle, rgba(20, 36, 24, 0.72) 98%, transparent 100%) right 34px top 5px / 2px 2px no-repeat,
+    radial-gradient(circle, rgba(20, 36, 24, 0.72) 98%, transparent 100%) right 22px top 5px / 2px 2px no-repeat;
 }
 
 .box-card::after,
@@ -1012,6 +1020,29 @@ button {
   gap: 8px;
 }
 
+.version-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.version-made-pill {
+  padding: 3px 10px;
+  min-height: 24px;
+  border-radius: 999px;
+  border: 1.3px solid rgba(43, 23, 17, 0.42);
+  background: color-mix(in srgb, var(--box-assigned-pill) 46%, white);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 700;
+  cursor: default;
+  pointer-events: none;
+}
+
 .version-card-meta {
   margin-top: 5px;
   display: flex;
@@ -1071,14 +1102,22 @@ button {
   border-bottom: 1px solid rgba(43, 23, 17, 0.42);
   background:
     linear-gradient(rgba(43, 23, 17, 0.68), rgba(43, 23, 17, 0.68)) left 9px top 1px / 6px 2px no-repeat,
-    linear-gradient(rgba(43, 23, 17, 0.68), rgba(43, 23, 17, 0.68)) right 9px top 1px / 6px 2px no-repeat;
+    radial-gradient(circle, rgba(43, 23, 17, 0.68) 98%, transparent 100%) left 9px top 2px / 2px 2px no-repeat,
+    radial-gradient(circle, rgba(43, 23, 17, 0.68) 98%, transparent 100%) left 13px top 2px / 2px 2px no-repeat,
+    linear-gradient(rgba(43, 23, 17, 0.68), rgba(43, 23, 17, 0.68)) right 9px top 1px / 6px 2px no-repeat,
+    radial-gradient(circle, rgba(43, 23, 17, 0.68) 98%, transparent 100%) right 13px top 2px / 2px 2px no-repeat,
+    radial-gradient(circle, rgba(43, 23, 17, 0.68) 98%, transparent 100%) right 9px top 2px / 2px 2px no-repeat;
 }
 
 .theme-garden .recipe-box-mini .mini-lid {
   border-bottom-color: rgba(20, 36, 24, 0.45);
   background:
     linear-gradient(rgba(20, 36, 24, 0.7), rgba(20, 36, 24, 0.7)) left 9px top 1px / 6px 2px no-repeat,
-    linear-gradient(rgba(20, 36, 24, 0.7), rgba(20, 36, 24, 0.7)) right 9px top 1px / 6px 2px no-repeat;
+    radial-gradient(circle, rgba(20, 36, 24, 0.7) 98%, transparent 100%) left 9px top 2px / 2px 2px no-repeat,
+    radial-gradient(circle, rgba(20, 36, 24, 0.7) 98%, transparent 100%) left 13px top 2px / 2px 2px no-repeat,
+    linear-gradient(rgba(20, 36, 24, 0.7), rgba(20, 36, 24, 0.7)) right 9px top 1px / 6px 2px no-repeat,
+    radial-gradient(circle, rgba(20, 36, 24, 0.7) 98%, transparent 100%) right 13px top 2px / 2px 2px no-repeat,
+    radial-gradient(circle, rgba(20, 36, 24, 0.7) 98%, transparent 100%) right 9px top 2px / 2px 2px no-repeat;
 }
 
 .recipe-box-mini.is-used {
@@ -1132,6 +1171,62 @@ button {
 .version-card.active,
 .history-card.active {
   outline: 2px solid var(--accent);
+}
+
+.box-card.box-card-compact {
+  width: 52px;
+  min-width: 52px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  box-shadow: 2px 2px 0 rgba(43, 23, 17, 0.55);
+}
+
+.box-card.box-card-compact::before {
+  height: 7px;
+  border-bottom-width: 1px;
+  background:
+    linear-gradient(rgba(43, 23, 17, 0.75), rgba(43, 23, 17, 0.75)) left 9px top 1px / 6px 2px no-repeat,
+    radial-gradient(circle, rgba(43, 23, 17, 0.75) 98%, transparent 100%) left 9px top 2px / 2px 2px no-repeat,
+    radial-gradient(circle, rgba(43, 23, 17, 0.75) 98%, transparent 100%) left 13px top 2px / 2px 2px no-repeat,
+    linear-gradient(rgba(43, 23, 17, 0.75), rgba(43, 23, 17, 0.75)) right 9px top 1px / 6px 2px no-repeat,
+    radial-gradient(circle, rgba(43, 23, 17, 0.75) 98%, transparent 100%) right 13px top 2px / 2px 2px no-repeat,
+    radial-gradient(circle, rgba(43, 23, 17, 0.75) 98%, transparent 100%) right 9px top 2px / 2px 2px no-repeat;
+}
+
+.theme-garden .box-card.box-card-compact::before {
+  background:
+    linear-gradient(rgba(20, 36, 24, 0.72), rgba(20, 36, 24, 0.72)) left 9px top 1px / 6px 2px no-repeat,
+    radial-gradient(circle, rgba(20, 36, 24, 0.72) 98%, transparent 100%) left 9px top 2px / 2px 2px no-repeat,
+    radial-gradient(circle, rgba(20, 36, 24, 0.72) 98%, transparent 100%) left 13px top 2px / 2px 2px no-repeat,
+    linear-gradient(rgba(20, 36, 24, 0.72), rgba(20, 36, 24, 0.72)) right 9px top 1px / 6px 2px no-repeat,
+    radial-gradient(circle, rgba(20, 36, 24, 0.72) 98%, transparent 100%) right 13px top 2px / 2px 2px no-repeat,
+    radial-gradient(circle, rgba(20, 36, 24, 0.72) 98%, transparent 100%) right 9px top 2px / 2px 2px no-repeat;
+}
+
+.box-card.box-card-compact .box-top,
+.box-card.box-card-compact .box-metrics,
+.box-card.box-card-compact label {
+  display: none;
+}
+
+.box-card.box-card-assigned-placeholder {
+  width: 112px;
+  min-width: 112px;
+  height: 66px;
+  min-height: 66px;
+  padding: 0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px dashed rgba(43, 23, 17, 0.35);
+  box-shadow: none;
+  opacity: 0.48;
+}
+
+.box-card.box-card-assigned-placeholder::before,
+.box-card.box-card-assigned-placeholder::after {
+  content: none;
 }
 
 .extra-card {
@@ -1214,6 +1309,7 @@ button {
   display: grid;
   gap: 4px;
   align-content: start;
+  justify-items: center;
   border-style: dashed;
   border-width: 2px;
   border-color: rgba(43, 23, 17, 0.35);
@@ -1244,7 +1340,19 @@ button {
 
 .planner-card {
   padding: 5px;
-  border-radius: 10px;
+  border-radius: 6px 6px 20px 20px;
+  width: min(100%, 186px);
+  aspect-ratio: 1.78 / 1;
+  min-height: 112px;
+  justify-self: center;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  align-content: start;
+}
+
+.planner-card::before {
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
 }
 
 .box-card.box-card-unassigned {
@@ -1252,6 +1360,26 @@ button {
     linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0)),
     var(--box-fill, var(--made-1));
   border-color: var(--line-strong);
+}
+
+.box-card.box-card-assigned-tone {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0)),
+    var(--box-fill, var(--made-2));
+  border-color: var(--line-strong);
+}
+
+.box-card.box-card-recipe-top {
+  width: 112px;
+  min-width: 112px;
+  min-height: 66px;
+  padding: 12px 10px 10px 12px;
+  border-radius: 10px 10px 22px 22px;
+}
+
+.box-card.box-card-recipe-top .box-top strong {
+  font-size: 0.78rem;
+  line-height: 1.05;
 }
 
 .box-card.box-card-unassigned .box-top span {
@@ -1353,6 +1481,23 @@ button {
   letter-spacing: -0.01em;
 }
 
+.planner-card .box-top {
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.planner-card .box-top strong {
+  display: -webkit-box;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  white-space: normal;
+  text-overflow: ellipsis;
+}
+
 .planner-card .box-metrics,
 .box-card .box-metrics {
   gap: 4px;
@@ -1368,6 +1513,23 @@ button {
   border-radius: 999px;
   font-family: var(--mono);
   letter-spacing: 0.02em;
+}
+
+.planner-card .box-metrics {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  overflow: hidden;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.planner-card .box-metrics span {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  font-size: 0.48rem;
+  letter-spacing: 0.03em;
 }
 
 .planner-card label,
@@ -1390,16 +1552,22 @@ button {
 }
 
 .box-card label button,
-.planner-card label button {
-  padding: 3px 7px;
+.planner-card label button,
+.planner-unassign-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  min-height: 22px;
+  height: 22px;
   border-radius: 999px;
   border: 1.3px solid rgba(43, 23, 17, 0.44);
   background: rgba(255, 255, 255, 0.78);
   color: var(--text);
-  font-size: 0.6rem;
+  font-size: 0.56rem;
   font-family: var(--mono);
-  letter-spacing: 0.02em;
-  line-height: 1.1;
+  letter-spacing: 0.03em;
+  line-height: 1;
 }
 
 .planner-card-actions {
@@ -1408,17 +1576,44 @@ button {
   margin-top: 4px;
 }
 
+.planner-card .planner-card-actions {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.planner-card .planner-card-actions label {
+  margin: 0;
+  flex: 1;
+}
+
+.planner-card .planner-card-actions label button,
+.planner-card .planner-unassign-button {
+  min-height: 18px;
+  height: 18px;
+  padding: 1px 6px;
+  line-height: 1;
+}
+
+.planner-card .planner-card-actions button {
+  font-size: 0.48rem;
+}
+
+.planner-card .planner-card-actions label button {
+  width: 100%;
+}
+
+.planner-card .planner-unassign-button {
+  flex: 0 0 auto;
+}
+
 .planner-unassign-button {
   justify-self: start;
-  padding: 2px 7px;
-  border-radius: 999px;
   border: 1.3px solid rgba(43, 23, 17, 0.42);
   background: rgba(255, 255, 255, 0.62);
-  color: var(--text);
-  font-size: 0.56rem;
-  font-family: var(--mono);
-  letter-spacing: 0.03em;
-  line-height: 1.1;
 }
 
 .dropzone {
@@ -1785,6 +1980,128 @@ button {
   overflow-x: auto;
   padding-bottom: 4px;
   margin-top: 20px;
+}
+
+.planner-mobile-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.planner-mobile-day {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 2px solid rgba(43, 23, 17, 0.24);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.planner-mobile-day-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.planner-mobile-day-head h4 {
+  margin: 0;
+  font-family: 'Fraunces', serif;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.planner-mobile-day-head h4 span {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.planner-mobile-meals {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.planner-mobile-meal-row {
+  display: grid;
+  gap: 6px;
+  min-width: 150px;
+}
+
+.planner-mobile-meal-label {
+  justify-self: center;
+  transform: none;
+}
+
+.planner-mobile-slot {
+  min-height: 96px;
+  border: 2px dashed rgba(43, 23, 17, 0.28);
+  border-radius: 14px;
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  align-content: start;
+}
+
+.planner-mobile-slot .planner-card {
+  width: 100%;
+  max-width: 260px;
+}
+
+.planner-mobile-assign {
+  width: 100%;
+  max-width: 260px;
+  min-height: 42px;
+  border: 2px dashed rgba(43, 23, 17, 0.38);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--muted);
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.66rem;
+}
+
+.planner-mobile-total {
+  margin-top: 2px;
+}
+
+.mobile-assign-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(22, 14, 10, 0.44);
+  display: grid;
+  align-items: end;
+}
+
+.mobile-assign-sheet {
+  background: var(--paper);
+  border-radius: 20px 20px 0 0;
+  border: 2px solid var(--line-strong);
+  box-shadow: 0 -8px 30px rgba(22, 14, 10, 0.22);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.mobile-assign-list {
+  display: grid;
+  gap: 8px;
+}
+
+.mobile-assign-option {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
 }
 
 .shopping-group {
